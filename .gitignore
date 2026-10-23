@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+
+# Local environment and artifacts
+.env
+*.pt
+*.pth
+*.safetensors
+models/
+outputs/
+.ipynb_checkpoints/

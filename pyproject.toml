@@ -1,0 +1,37 @@
+[project]
+name = "kv-cache-from-scratch"
+version = "0.1.0"
+description = "From-scratch key-value cache for autoregressive inference of a decoder-only GPT."
+readme = "README.md"
+authors = [
+    { name = "Francesco Vissicchio", email = "77024611+FraViss@users.noreply.github.com" },
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "kvcache"
+
+# Blackwell (sm_120) needs wheels built against CUDA 12.8+. The default PyPI
+# index does not guarantee that, so torch is pinned to the cu128 index.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
