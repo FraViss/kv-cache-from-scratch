@@ -3,6 +3,7 @@ import math
 import torch
 from torch import Tensor, nn
 
+from kvcache.cache import KVCache
 from kvcache.config import GPT2Config
 
 
@@ -38,8 +39,16 @@ class CausalSelfAttention(nn.Module):
         out = weights @ v
         return out.transpose(1, 2).contiguous().view(B, Tq, self.n_head * self.head_dim)
 
-    def forward(self, x: Tensor) -> Tensor:
-        return self.c_proj(self.attend(*self.project_qkv(x)))
+    def forward(
+        self, x: Tensor, cache: KVCache | None = None, layer_idx: int | None = None
+    ) -> Tensor:
+        q, k, v = self.project_qkv(x)
+        if cache is not None:
+            if layer_idx is None:
+                raise ValueError("layer_idx is required when a cache is given")
+            # Update before attending: the new tokens must see themselves.
+            k, v = cache.update(layer_idx, k, v)
+        return self.c_proj(self.attend(q, k, v))
 
 
 class MLP(nn.Module):
@@ -61,8 +70,10 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_eps)
         self.mlp = MLP(config)
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = x + self.attn(self.ln_1(x))
+    def forward(
+        self, x: Tensor, cache: KVCache | None = None, layer_idx: int | None = None
+    ) -> Tensor:
+        x = x + self.attn(self.ln_1(x), cache, layer_idx)
         x = x + self.mlp(self.ln_2(x))
         return x
 
@@ -84,12 +95,19 @@ class GPT(nn.Module):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.lm_head.weight = self.wte.weight
 
-    def forward(self, input_ids: Tensor, position_offset: int = 0) -> Tensor:
+    def forward(
+        self, input_ids: Tensor, position_offset: int = 0, cache: KVCache | None = None
+    ) -> Tensor:
         """Return logits of shape (B, T, vocab_size) for input_ids of shape (B, T).
 
-        position_offset is the absolute position of the first token in input_ids.
-        It is 0 for a full forward pass; cached decoding (M2) feeds only the new
-        tokens and sets it to the number of tokens already in the cache.
+        Without a cache, input_ids is the whole sequence and position_offset is the
+        absolute position of its first token (0 for a full forward pass).
+
+        With a cache, input_ids holds only the new tokens: the whole prompt for a
+        prefill, one token per sequence for a decode step, or any chunk in between.
+        Their keys and values are appended to the cache. The position of the first new
+        token is cache.seq_len, the cache being the only source of truth for it, so
+        position_offset must be left at 0.
         """
         if input_ids.dim() != 2:
             raise ValueError(f"input_ids must be 2D (B, T), got shape {tuple(input_ids.shape)}")
@@ -97,6 +115,14 @@ class GPT(nn.Module):
             raise ValueError(f"input_ids must have dtype torch.long, got {input_ids.dtype}")
         if position_offset < 0:
             raise ValueError(f"position_offset must be >= 0, got {position_offset}")
+        if cache is not None:
+            if position_offset != 0:
+                raise ValueError(
+                    "position_offset must be 0 when a cache is given: the position "
+                    f"comes from cache.seq_len, got position_offset={position_offset}"
+                )
+            # Read once, before any block updates the cache.
+            position_offset = cache.seq_len
         T = input_ids.shape[1]
         if position_offset + T > self.config.n_positions:
             raise ValueError(
@@ -106,6 +132,6 @@ class GPT(nn.Module):
 
         positions = torch.arange(position_offset, position_offset + T, device=input_ids.device)
         x = self.wte(input_ids) + self.wpe(positions)
-        for block in self.h:
-            x = block(x)
+        for layer_idx, block in enumerate(self.h):
+            x = block(x, cache, layer_idx)
         return self.lm_head(self.ln_f(x))
