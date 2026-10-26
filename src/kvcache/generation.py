@@ -28,10 +28,13 @@ def generate_greedy_uncached(model: GPT, input_ids: Tensor, max_new_tokens: int)
             "the context and make the cached and uncached paths incomparable."
         )
 
+    if max_new_tokens == 0:
+        return input_ids.clone()
+
     with torch.inference_mode():
         sequence = input_ids
         for _ in range(max_new_tokens):
             next_token = model(sequence)[:, -1, :].argmax(dim=-1, keepdim=True)
             sequence = torch.cat((sequence, next_token), dim=1)
-        token_ids = sequence.tolist()
-    return torch.tensor(token_ids, dtype=input_ids.dtype, device=input_ids.device)
+    # A clone made outside inference_mode is a normal tensor that autograd can use.
+    return sequence.clone()
