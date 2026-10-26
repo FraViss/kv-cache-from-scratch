@@ -6,6 +6,11 @@
 
 - [status.md](status.md) — current state and the next step
 - [decisions/](decisions/) — architecture decision records, in numerical order
+  - [0001](decisions/0001-gpt2-decoder-as-base-model.md) — GPT-2 decoder as the base model
+  - [0002](decisions/0002-core-scope-and-deferred-serving.md) — core scope and deferred serving
+  - [0003](decisions/0003-load-weights-from-safetensors.md) — load weights from safetensors
+  - [0004](decisions/0004-float64-for-correctness-tests.md) — float64 for correctness tests
+  - [0005](decisions/0005-token-id-api-and-tokenizer.md) — token-id API and tokenizer
 
 ## Decision records
 
