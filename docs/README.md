@@ -12,6 +12,7 @@
   - [0004](decisions/0004-float64-for-correctness-tests.md) — float64 for correctness tests
   - [0005](decisions/0005-token-id-api-and-tokenizer.md) — token-id API and tokenizer
   - [0006](decisions/0006-generation-contract.md) — generation contract
+  - [0007](decisions/0007-mutable-kv-cache-interface.md) — mutable KV cache interface
 
 ## Decision records
 
@@ -26,8 +27,9 @@ Files in `docs/decisions/` use four-digit numbering (`0001`, `0002`, and so on).
 ## Project conventions
 
 - Python 3.12, managed with uv
-- Tests run with pytest
+- Tests run with pytest. `uv run pytest` runs the fast tests only; `uv run pytest -m integration` runs the Hugging Face integration tests and must pass before every push
 - Commits follow Conventional Commits and stay granular
 - All public content is written in English
 - No agent-specific instruction files
 - Commits are attributed only to the author
+- Agents stop at commits and never push: the author pushes after reviewing
