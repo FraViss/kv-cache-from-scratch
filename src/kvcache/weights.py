@@ -8,6 +8,10 @@ from torch import Tensor
 from kvcache.config import GPT2Config
 from kvcache.model import GPT
 
+# Commit of https://huggingface.co/gpt2 resolved from the short revision 607a30d7
+# with huggingface_hub.HfApi.model_info on 2026-10-26. Same snapshot as the local cache.
+GPT2_REVISION = "607a30d783dfa663caf39e06633721c8d4cfcd7e"
+
 _PREFIX = "transformer."
 _MASK_BUFFER_SUFFIXES = (".attn.bias", ".attn.masked_bias")
 _CONV1D_WEIGHT_SUFFIXES = (
@@ -18,7 +22,7 @@ _CONV1D_WEIGHT_SUFFIXES = (
 )
 
 
-def download_gpt2_checkpoint(repo_id: str = "gpt2", revision: str = "main") -> Path:
+def download_gpt2_checkpoint(repo_id: str = "gpt2", revision: str = GPT2_REVISION) -> Path:
     """Download model.safetensors into the standard Hugging Face cache and return its path."""
     return Path(hf_hub_download(repo_id=repo_id, filename="model.safetensors", revision=revision))
 
@@ -71,7 +75,7 @@ def load_gpt2_weights(model: GPT, sd_converted: dict[str, Tensor]) -> None:
 def load_pretrained_gpt2(
     dtype: torch.dtype = torch.float32,
     device: str | torch.device = "cpu",
-    revision: str = "main",
+    revision: str = GPT2_REVISION,
 ) -> GPT:
     """Build GPT-2 small with its pretrained weights, in eval mode."""
     sd = load_file(download_gpt2_checkpoint(revision=revision))

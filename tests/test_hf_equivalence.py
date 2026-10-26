@@ -3,15 +3,16 @@ import torch
 from transformers import GPT2LMHeadModel
 
 from kvcache import GPT, load_pretrained_gpt2
+from kvcache.weights import GPT2_REVISION
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture(scope="module")
 def models() -> tuple[GPT, GPT2LMHeadModel]:
-    ours = load_pretrained_gpt2(dtype=torch.float64, device="cpu")
+    ours = load_pretrained_gpt2(dtype=torch.float64, device="cpu", revision=GPT2_REVISION)
     reference = GPT2LMHeadModel.from_pretrained(
-        "gpt2", dtype=torch.float64, attn_implementation="eager"
+        "gpt2", revision=GPT2_REVISION, dtype=torch.float64, attn_implementation="eager"
     ).eval()
     return ours, reference
 
