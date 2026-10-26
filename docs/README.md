@@ -14,6 +14,7 @@
   - [0006](decisions/0006-generation-contract.md) — generation contract
   - [0007](decisions/0007-mutable-kv-cache-interface.md) — mutable KV cache interface
   - [0008](decisions/0008-preallocated-static-kv-cache.md) — preallocated static KV cache
+  - [0009](decisions/0009-benchmark-methodology.md) — benchmark methodology
 
 ## Decision records
 
