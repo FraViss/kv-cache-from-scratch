@@ -38,6 +38,9 @@ torch = { index = "pytorch-cu128" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The default run skips the slow Hugging Face tests. A later -m on the command line
+# overrides this one, so `pytest -m integration` runs only the integration tests.
+addopts = "-m 'not integration'"
 markers = [
     "integration: downloads the GPT-2 checkpoint (~550 MB on first run) and compares against Hugging Face",
 ]
