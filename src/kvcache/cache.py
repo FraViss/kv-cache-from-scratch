@@ -4,6 +4,8 @@ from collections.abc import Sequence
 import torch
 from torch import Tensor
 
+from kvcache.config import GPT2Config
+
 
 class KVCache(ABC):
     """Per-layer store of attention keys and values, shared by every layer of one model.
@@ -174,3 +176,107 @@ class DynamicKVCache(KVCache):
             new_v = torch.cat((past_v, v), dim=-2)
         self._keys[layer_idx], self._values[layer_idx] = new_k, new_v
         return new_k, new_v
+
+
+class StaticKVCache(KVCache):
+    """KV cache backed by buffers preallocated once, written in place at each layer's length.
+
+    The constructor allocates keys and values of shape
+    (n_layer, batch_size, n_head, max_seq_len, head_dim), and nothing allocates again
+    afterwards. Build the cache outside torch.inference_mode(): buffers created inside it
+    would be inference tensors, which can no longer be written in place outside it.
+    """
+
+    def __init__(
+        self,
+        n_layer: int,
+        batch_size: int,
+        n_head: int,
+        head_dim: int,
+        max_seq_len: int,
+        dtype: torch.dtype,
+        device: str | torch.device,
+    ) -> None:
+        sizes = {
+            "n_layer": n_layer,
+            "batch_size": batch_size,
+            "n_head": n_head,
+            "head_dim": head_dim,
+            "max_seq_len": max_seq_len,
+        }
+        for name, size in sizes.items():
+            if size < 1:
+                raise ValueError(f"{name} must be >= 1, got {size}")
+        shape = (n_layer, batch_size, n_head, max_seq_len, head_dim)
+        self._keys = torch.zeros(shape, dtype=dtype, device=device)
+        self._values = torch.zeros(shape, dtype=dtype, device=device)
+        self._lengths = [0] * n_layer
+
+    @classmethod
+    def from_config(
+        cls,
+        config: GPT2Config,
+        batch_size: int,
+        max_seq_len: int | None = None,
+        dtype: torch.dtype = torch.float32,
+        device: str | torch.device = "cpu",
+    ) -> "StaticKVCache":
+        """Size the cache for a model; max_seq_len defaults to config.n_positions."""
+        return cls(
+            n_layer=config.n_layer,
+            batch_size=batch_size,
+            n_head=config.n_head,
+            head_dim=config.head_dim,
+            max_seq_len=config.n_positions if max_seq_len is None else max_seq_len,
+            dtype=dtype,
+            device=device,
+        )
+
+    @property
+    def n_layer(self) -> int:
+        return self._keys.shape[0]
+
+    @property
+    def seq_len(self) -> int:
+        """Number of tokens in layer 0.
+
+        A forward pass updates the layers in order, so during a forward layer 0 is
+        already ahead of the others. Read seq_len before the forward starts, which is
+        what `GPT.forward` does to get the position of the first new token.
+        """
+        return self._lengths[0]
+
+    @property
+    def capacity(self) -> int:
+        return self._keys.shape[3]
+
+    @property
+    def nbytes(self) -> int:
+        return 2 * self._keys.numel() * self._keys.element_size()
+
+    @property
+    def used_nbytes(self) -> int:
+        _, batch_size, n_head, _, head_dim = self._keys.shape
+        per_token = batch_size * n_head * head_dim * self._keys.element_size()
+        return 2 * sum(self._lengths) * per_token
+
+    def reset(self) -> None:
+        """Forget every token. The buffers keep their old contents, which is safe because
+        update only ever returns the filled part of a layer."""
+        self._lengths = [0] * self.n_layer
+
+    def update(self, layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
+        # The buffer fixes B, n_head, head_dim, dtype and device from the start.
+        _validate_update(self.n_layer, self._lengths, self._keys[0], layer_idx, k, v)
+        start = self._lengths[layer_idx]
+        end = start + k.shape[-2]
+        if end > self.capacity:
+            raise ValueError(
+                f"layer {layer_idx} would hold {end} tokens ({start} + {k.shape[-2]}), "
+                f"over the cache capacity of {self.capacity}"
+            )
+        self._keys[layer_idx, :, :, start:end].copy_(k)
+        self._values[layer_idx, :, :, start:end].copy_(v)
+        self._lengths[layer_idx] = end
+        # Only the filled part is returned, so attention never sees stale or zero slots.
+        return self._keys[layer_idx, :, :, :end], self._values[layer_idx, :, :, :end]
