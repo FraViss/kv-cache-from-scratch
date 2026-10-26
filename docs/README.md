@@ -11,6 +11,7 @@
   - [0003](decisions/0003-load-weights-from-safetensors.md) — load weights from safetensors
   - [0004](decisions/0004-float64-for-correctness-tests.md) — float64 for correctness tests
   - [0005](decisions/0005-token-id-api-and-tokenizer.md) — token-id API and tokenizer
+  - [0006](decisions/0006-generation-contract.md) — generation contract
 
 ## Decision records
 

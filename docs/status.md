@@ -2,13 +2,13 @@
 
 Date: 2026-10-26
 
-State: M1 in progress. Part 1 is done: the GPT-2 small model from scratch, the strict safetensors weight loader, and the logits equivalence test against Hugging Face (float64, CPU, `atol=1e-9`).
+State: M1 done. The GPT-2 small model, the strict safetensors loader (checkpoint pinned to `607a30d783dfa663caf39e06633721c8d4cfcd7e`) and the uncached greedy baseline all match Hugging Face. Logits agree within 1.6e-13 in float64, and greedy sequences are identical.
 
 ## Milestones
 
 | ID | Milestone | Status |
 | --- | --- | --- |
-| M1 | GPT-2 decoder from scratch, weight loader, greedy generation without a cache, logits checked against Hugging Face | in progress (part 1 done: model, loader, equivalence) |
+| M1 | GPT-2 decoder from scratch, weight loader, greedy generation without a cache, logits checked against Hugging Face | done |
 | M2 | Dynamic cache (concatenation) with logit-equivalence tests against the uncached path | not started |
 | M3 | Static preallocated cache with a write index | not started |
 | M4 | Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model | not started |
@@ -16,7 +16,7 @@ State: M1 in progress. Part 1 is done: the GPT-2 small model from scratch, the s
 
 ## Next step
 
-M1 part 2: greedy generation without a cache, as the baseline.
+M2: dynamic cache by concatenation, with logit-equivalence tests against the uncached path.
 
 ## How to get back up to speed
 
