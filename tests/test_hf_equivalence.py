@@ -8,6 +8,8 @@ from transformers import GPT2LMHeadModel
 from kvcache import (
     GPT,
     DynamicKVCache,
+    KVCache,
+    StaticKVCache,
     generate_greedy_cached,
     generate_greedy_uncached,
     load_pretrained_gpt2,
@@ -21,6 +23,24 @@ GENERATION_CASES = pytest.mark.parametrize(
     [((2, 16), 48), ((1, 1000), 24)],
     ids=["prompt-2x16-plus-48", "prompt-1x1000-plus-24"],
 )
+
+
+def static_cache(model: GPT, batch_size: int) -> StaticKVCache:
+    """A float64 static cache with the full context (1024 tokens) as capacity."""
+    return StaticKVCache.from_config(model.config, batch_size, dtype=torch.float64)
+
+
+def generate_greedy_cached_static(
+    model: GPT, prompt: torch.Tensor, new_tokens: int
+) -> torch.Tensor:
+    cache = static_cache(model, prompt.shape[0])
+    return generate_greedy_cached(model, prompt, new_tokens, cache=cache)
+
+
+CACHES: dict[str, Callable[[GPT, int], KVCache]] = {
+    "dynamic": lambda model, batch_size: DynamicKVCache(model.config.n_layer),
+    "static": static_cache,
+}
 
 
 @pytest.fixture(scope="module")
@@ -73,7 +93,9 @@ def hugging_face_greedy(
 
 @GENERATION_CASES
 @pytest.mark.parametrize(
-    "generate", [generate_greedy_uncached, generate_greedy_cached], ids=["uncached", "cached"]
+    "generate",
+    [generate_greedy_uncached, generate_greedy_cached, generate_greedy_cached_static],
+    ids=["uncached", "cached-dynamic", "cached-static"],
 )
 def test_greedy_generation_matches_hugging_face(
     models: tuple[GPT, GPT2LMHeadModel],
@@ -88,15 +110,16 @@ def test_greedy_generation_matches_hugging_face(
     assert torch.equal(our_output, hugging_face_greedy(reference, prompt, new_tokens))
 
 
+@pytest.mark.parametrize("cache_kind", CACHES.keys())
 def test_pretrained_cached_logits_match_uncached_forward(
-    models: tuple[GPT, GPT2LMHeadModel],
+    models: tuple[GPT, GPT2LMHeadModel], cache_kind: str
 ) -> None:
     ours, _ = models
     generator = torch.Generator().manual_seed(1234)
     prompt = torch.randint(0, ours.config.vocab_size, (1, 1000), generator=generator)
     decode_steps = 24
 
-    cache = DynamicKVCache(ours.config.n_layer)
+    cache = CACHES[cache_kind](ours, 1)
     with torch.no_grad():
         logits = ours(prompt, cache=cache)[:, -1:, :].clone()
         step_logits = [logits]

@@ -1,13 +1,15 @@
 import math
+from collections.abc import Callable
 
 import pytest
 import torch
 from torch import Tensor
 
-from kvcache import GPT, DynamicKVCache, GPT2Config
+from kvcache import GPT, DynamicKVCache, GPT2Config, KVCache
 
 SMALL = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
 B = 2
+CacheFactory = Callable[[GPT2Config, int], KVCache]
 
 
 @pytest.fixture
@@ -35,11 +37,11 @@ def random_kv(length: int, seed: int = 0, **shape_overrides: int) -> tuple[Tenso
     return k, v
 
 
-def test_update_on_empty_cache_copies_the_input(model: GPT) -> None:
+def test_update_on_empty_cache_copies_the_input(model: GPT, cache_factory: CacheFactory) -> None:
     x = torch.randn(B, 5, SMALL.n_embd, dtype=torch.float64, generator=torch.Generator().manual_seed(0))
     with torch.no_grad():
         _, k, v = model.h[0].attn.project_qkv(x)
-    cache = DynamicKVCache(SMALL.n_layer)
+    cache = cache_factory(SMALL, B)
     cached_k, cached_v = cache.update(0, k, v)
     assert torch.equal(cached_k, k)
     assert torch.equal(cached_v, v)
@@ -50,8 +52,8 @@ def test_update_on_empty_cache_copies_the_input(model: GPT) -> None:
     assert cached_v.untyped_storage().data_ptr() != v.untyped_storage().data_ptr()
 
 
-def test_successive_updates_concatenate() -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_successive_updates_concatenate(cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, B)
     pieces = [random_kv(length, seed=length) for length in (3, 1, 4)]
     total = 0
     for i, (k, v) in enumerate(pieces):
@@ -70,45 +72,53 @@ def test_nbytes_after_model_forward(model: GPT) -> None:
         model(random_ids(B, T), cache=cache)
     expected = 2 * SMALL.n_layer * B * SMALL.n_head * T * SMALL.head_dim * torch.float64.itemsize
     assert cache.nbytes == expected
+    assert cache.used_nbytes == expected
 
 
-def test_reset_empties_the_cache() -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_reset_empties_the_cache(cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, B)
     for layer_idx in range(SMALL.n_layer):
         cache.update(layer_idx, *random_kv(4))
     assert cache.seq_len == 4
+    nbytes = cache.nbytes
     cache.reset()
     assert cache.seq_len == 0
-    assert cache.nbytes == 0
+    assert cache.used_nbytes == 0
+    # A dynamic cache frees its tensors; a static one keeps its buffers allocated.
+    assert cache.nbytes == (0 if cache.capacity is None else nbytes)
+    k, v = random_kv(2, seed=1)
+    cached_k, cached_v = cache.update(0, k, v)
+    assert torch.equal(cached_k, k)
+    assert torch.equal(cached_v, v)
 
 
 @pytest.mark.parametrize("layer_idx", [-1, SMALL.n_layer])
-def test_rejects_layer_idx_out_of_range(layer_idx: int) -> None:
+def test_rejects_layer_idx_out_of_range(cache_factory: CacheFactory, layer_idx: int) -> None:
     with pytest.raises(ValueError, match="layer_idx"):
-        DynamicKVCache(SMALL.n_layer).update(layer_idx, *random_kv(3))
+        cache_factory(SMALL, B).update(layer_idx, *random_kv(3))
 
 
-def test_rejects_non_4d_tensors() -> None:
+def test_rejects_non_4d_tensors(cache_factory: CacheFactory) -> None:
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="4D"):
-        DynamicKVCache(SMALL.n_layer).update(0, k[0], v[0])
+        cache_factory(SMALL, B).update(0, k[0], v[0])
 
 
-def test_rejects_k_and_v_with_different_shapes() -> None:
+def test_rejects_k_and_v_with_different_shapes(cache_factory: CacheFactory) -> None:
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="same shape"):
-        DynamicKVCache(SMALL.n_layer).update(0, k, v[..., :-1])
+        cache_factory(SMALL, B).update(0, k, v[..., :-1])
 
 
-def test_rejects_k_and_v_with_different_dtypes() -> None:
+def test_rejects_k_and_v_with_different_dtypes(cache_factory: CacheFactory) -> None:
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="share dtype and device"):
-        DynamicKVCache(SMALL.n_layer).update(0, k, v.float())
+        cache_factory(SMALL, B).update(0, k, v.float())
 
 
 @pytest.mark.parametrize("dimension", ["batch", "n_head", "head_dim"])
-def test_rejects_shape_different_from_the_cache(dimension: str) -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_rejects_shape_different_from_the_cache(cache_factory: CacheFactory, dimension: str) -> None:
+    cache = cache_factory(SMALL, B)
     cache.update(0, *random_kv(3))
     other = {"batch": B + 1, "n_head": SMALL.n_head + 1, "head_dim": SMALL.head_dim + 1}
     name = "B" if dimension == "batch" else dimension
@@ -116,35 +126,36 @@ def test_rejects_shape_different_from_the_cache(dimension: str) -> None:
         cache.update(0, *random_kv(1, **{dimension: other[dimension]}))
 
 
-def test_rejects_dtype_different_from_the_cache() -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_rejects_dtype_different_from_the_cache(cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, B)
     cache.update(0, *random_kv(3))
     k, v = random_kv(1)
     with pytest.raises(ValueError, match="dtype torch.float32 does not match"):
         cache.update(0, k.float(), v.float())
 
 
-def test_rejects_device_different_from_the_cache() -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_rejects_device_different_from_the_cache(cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, B)
     cache.update(0, *random_kv(3))
     k, v = random_kv(1)
     with pytest.raises(ValueError, match="device meta does not match"):
         cache.update(0, k.to("meta"), v.to("meta"))
 
 
-def test_rejects_layer_updated_twice() -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_rejects_layer_updated_twice(cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, B)
     for layer_idx in range(SMALL.n_layer):
         cache.update(layer_idx, *random_kv(3))
-    nbytes = cache.nbytes
+    used_nbytes = cache.used_nbytes
     with pytest.raises(ValueError, match="updated twice or skipped"):
         cache.update(1, *random_kv(3))
     # A rejected update leaves the cache as it was.
-    assert cache.nbytes == nbytes
+    assert cache.seq_len == 3
+    assert cache.used_nbytes == used_nbytes
 
 
-def test_rejects_layer_skipped() -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_rejects_layer_skipped(cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, B)
     for layer_idx in range(SMALL.n_layer):
         cache.update(layer_idx, *random_kv(3))
     cache.update(0, *random_kv(1))  # layer 1 is skipped in this forward
@@ -153,18 +164,18 @@ def test_rejects_layer_skipped() -> None:
         cache.update(1, *random_kv(1))
 
 
-def test_rejects_later_layer_before_layer_0() -> None:
+def test_rejects_later_layer_before_layer_0(cache_factory: CacheFactory) -> None:
     with pytest.raises(ValueError, match="updated twice or skipped"):
-        DynamicKVCache(SMALL.n_layer).update(1, *random_kv(3))
+        cache_factory(SMALL, B).update(1, *random_kv(3))
 
 
-def test_model_rejects_position_offset_with_cache(model: GPT) -> None:
+def test_model_rejects_position_offset_with_cache(model: GPT, cache_factory: CacheFactory) -> None:
     with pytest.raises(ValueError, match="position_offset must be 0"):
-        model(random_ids(1, 3), position_offset=2, cache=DynamicKVCache(SMALL.n_layer))
+        model(random_ids(1, 3), position_offset=2, cache=cache_factory(SMALL, 1))
 
 
-def test_model_rejects_cache_past_n_positions(model: GPT) -> None:
-    cache = DynamicKVCache(SMALL.n_layer)
+def test_model_rejects_cache_past_n_positions(model: GPT, cache_factory: CacheFactory) -> None:
+    cache = cache_factory(SMALL, 1)
     with torch.no_grad():
         model(random_ids(1, 30), cache=cache)
         with pytest.raises(ValueError, match="30 \\+ 3 = 33 exceeds n_positions"):
