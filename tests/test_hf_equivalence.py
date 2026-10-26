@@ -44,16 +44,18 @@ def test_greedy_generation_matches_hugging_face(
     prompt = torch.randint(0, ours.config.vocab_size, prompt_shape, generator=generator)
     our_output = generate_greedy_uncached(ours, prompt, new_tokens)
 
-    # Disable the end-of-text stop on a copy, so the shared oracle keeps its config.
+    # Set every generation parameter on a copy, so the shared oracle keeps its config and
+    # generate receives no loose generation arguments next to the config. eos_token_id=None
+    # disables the end-of-text stop.
     generation_config = copy(reference.generation_config)
+    generation_config.max_new_tokens = new_tokens
+    generation_config.do_sample = False
+    generation_config.num_beams = 1
+    generation_config.pad_token_id = 50256
     generation_config.eos_token_id = None
     hf_output = reference.generate(
         prompt,
         attention_mask=torch.ones_like(prompt),
-        max_new_tokens=new_tokens,
-        do_sample=False,
-        num_beams=1,
-        pad_token_id=50256,
         generation_config=generation_config,
     )
 
