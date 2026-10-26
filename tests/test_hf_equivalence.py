@@ -1,8 +1,10 @@
+from copy import copy
+
 import pytest
 import torch
 from transformers import GPT2LMHeadModel
 
-from kvcache import GPT, load_pretrained_gpt2
+from kvcache import GPT, generate_greedy_uncached, load_pretrained_gpt2
 from kvcache.weights import GPT2_REVISION
 
 pytestmark = pytest.mark.integration
@@ -27,3 +29,38 @@ def test_logits_match_hugging_face(models: tuple[GPT, GPT2LMHeadModel], shape: t
         hf_logits = reference(input_ids).logits
     assert our_logits.dtype == hf_logits.dtype == torch.float64
     torch.testing.assert_close(our_logits, hf_logits, rtol=0, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("prompt_shape", "new_tokens"),
+    [((2, 16), 48), ((1, 1000), 24)],
+    ids=["prompt-2x16-plus-48", "prompt-1x1000-plus-24"],
+)
+def test_greedy_generation_matches_hugging_face(
+    models: tuple[GPT, GPT2LMHeadModel], prompt_shape: tuple[int, int], new_tokens: int
+) -> None:
+    ours, reference = models
+    generator = torch.Generator().manual_seed(1234)
+    prompt = torch.randint(0, ours.config.vocab_size, prompt_shape, generator=generator)
+    our_output = generate_greedy_uncached(ours, prompt, new_tokens)
+
+    # Disable the end-of-text stop on a copy, so the shared oracle keeps its config.
+    generation_config = copy(reference.generation_config)
+    generation_config.eos_token_id = None
+    hf_output = reference.generate(
+        prompt,
+        attention_mask=torch.ones_like(prompt),
+        max_new_tokens=new_tokens,
+        do_sample=False,
+        num_beams=1,
+        pad_token_id=50256,
+        generation_config=generation_config,
+    )
+
+    expected_length = prompt_shape[1] + new_tokens
+    if hf_output.shape[1] != expected_length:
+        raise AssertionError(
+            f"Hugging Face stopped early: got length {hf_output.shape[1]}, "
+            f"expected {expected_length}. The end-of-text stop is still active."
+        )
+    assert torch.equal(our_output, hf_output)
