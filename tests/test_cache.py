@@ -5,7 +5,15 @@ import pytest
 import torch
 from torch import Tensor
 
-from kvcache import GPT, DynamicKVCache, GPT2Config, KVCache
+from kvcache import (
+    GPT,
+    DynamicKVCache,
+    GPT2Config,
+    KVCache,
+    StaticKVCache,
+    generate_greedy_cached,
+    generate_greedy_uncached,
+)
 
 SMALL = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
 B = 2
@@ -205,3 +213,102 @@ def test_attend_with_more_keys_than_queries(model: GPT) -> None:
     expected = expected.transpose(1, 2).reshape(B, Tq, SMALL.n_embd)
 
     torch.testing.assert_close(model.h[0].attn.attend(q, k, v), expected, atol=1e-12, rtol=0)
+
+
+def static_cache(batch_size: int = B, max_seq_len: int | None = None) -> StaticKVCache:
+    return StaticKVCache.from_config(SMALL, batch_size, max_seq_len, dtype=torch.float64)
+
+
+def test_static_cache_allocates_full_capacity_up_front() -> None:
+    cache = static_cache()
+    itemsize = torch.float64.itemsize
+    max_seq_len = SMALL.n_positions
+    assert cache.capacity == max_seq_len
+    per_token = B * SMALL.n_head * SMALL.head_dim * itemsize
+    assert cache.nbytes == 2 * SMALL.n_layer * max_seq_len * per_token
+    assert cache.used_nbytes == 0
+    assert cache.seq_len == 0
+
+
+def test_static_cache_used_nbytes_after_model_forward(model: GPT) -> None:
+    cache = static_cache()
+    nbytes = cache.nbytes
+    T = 7
+    with torch.no_grad():
+        model(random_ids(B, T), cache=cache)
+    itemsize = torch.float64.itemsize
+    assert cache.used_nbytes == 2 * SMALL.n_layer * B * SMALL.n_head * T * SMALL.head_dim * itemsize
+    assert cache.nbytes == nbytes
+
+
+def test_static_cache_writes_in_place(model: GPT) -> None:
+    cache = static_cache()
+    pointers = []
+    update = cache.update
+
+    def recording_update(layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
+        cached_k, cached_v = update(layer_idx, k, v)
+        if layer_idx == 0:
+            pointers.append(cached_k.data_ptr())
+        return cached_k, cached_v
+
+    cache.update = recording_update
+    ids = random_ids(B, 15)
+    with torch.no_grad():
+        model(ids[:, :10], cache=cache)
+        for position in range(10, 15):
+            model(ids[:, position : position + 1], cache=cache)
+    assert len(pointers) == 6
+    assert set(pointers) == {cache._keys.data_ptr()}
+
+
+def test_static_cache_rejects_update_past_capacity() -> None:
+    cache = static_cache(max_seq_len=5)
+    for layer_idx in range(SMALL.n_layer):
+        cache.update(layer_idx, *random_kv(4))
+    keys, values = cache._keys.clone(), cache._values.clone()
+    with pytest.raises(ValueError, match="over the cache capacity of 5"):
+        cache.update(0, *random_kv(2, seed=1))
+    assert cache.seq_len == 4
+    assert torch.equal(cache._keys, keys)
+    assert torch.equal(cache._values, values)
+
+
+def test_static_cache_rejects_dtype_different_from_the_buffer() -> None:
+    cache = static_cache()
+    k, v = random_kv(3)
+    with pytest.raises(ValueError, match="float32 does not match the cache dtype torch.float64"):
+        cache.update(0, k.float(), v.float())
+    assert cache.seq_len == 0
+
+
+def test_static_cache_hides_stale_data_after_reset(model: GPT) -> None:
+    reused = static_cache()
+    fresh = static_cache()
+    sequence_b = random_ids(B, 6, seed=2)
+    with torch.no_grad():
+        model(random_ids(B, 20, seed=1), cache=reused)
+        reused.reset()
+        logits_reused = model(sequence_b, cache=reused)
+        logits_fresh = model(sequence_b, cache=fresh)
+    assert torch.equal(logits_reused, logits_fresh)
+
+
+def test_static_cache_is_reusable_outside_inference_mode(model: GPT) -> None:
+    cache = static_cache()
+    generate_greedy_cached(model, random_ids(B, 5), 4, cache=cache)
+    cache.reset()
+    with torch.no_grad():
+        model(random_ids(B, 5, seed=1), cache=cache)
+    assert cache.seq_len == 5
+    assert not cache._keys.is_inference()
+    assert not cache._values.is_inference()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_static_cache_on_cuda(model: GPT) -> None:
+    model = model.to("cuda")
+    prompt = random_ids(B, 5).to("cuda")
+    cache = StaticKVCache.from_config(SMALL, B, dtype=torch.float64, device="cuda")
+    cached = generate_greedy_cached(model, prompt, 20, cache=cache)
+    assert torch.equal(cached, generate_greedy_uncached(model, prompt, 20))

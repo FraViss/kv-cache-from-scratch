@@ -1,12 +1,15 @@
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 import torch
 
 from kvcache import (
     GPT,
+    DynamicKVCache,
     GPT2Config,
     KVCache,
+    StaticKVCache,
     generate_greedy_cached,
     generate_greedy_uncached,
 )
@@ -154,3 +157,41 @@ def test_cached_rejects_non_empty_cache(model: GPT, cache_factory: CacheFactory)
         model(random_ids(2, 3), cache=cache)
     with pytest.raises(ValueError, match="cache must be empty"):
         generate_greedy_cached(model, random_ids(2, 5), 2, cache=cache)
+
+
+@pytest.mark.parametrize(
+    "cache",
+    [
+        DynamicKVCache(SMALL.n_layer + 1),
+        StaticKVCache.from_config(replace(SMALL, n_layer=3), 2, dtype=torch.float64),
+    ],
+    ids=["dynamic", "static"],
+)
+def test_rejects_cache_with_a_different_number_of_layers(model: GPT, cache: KVCache) -> None:
+    with pytest.raises(ValueError, match="cache has 3 layers but the model has 2"):
+        model(random_ids(2, 5), cache=cache)
+    with pytest.raises(ValueError, match="cache has 3 layers but the model has 2"):
+        generate_greedy_cached(model, random_ids(2, 5), 4, cache=cache)
+
+
+def test_rejects_static_cache_too_small_before_any_forward(model: GPT) -> None:
+    calls = []
+    model.register_forward_hook(lambda *_: calls.append(1))
+    prompt_length, new_tokens = 5, 4
+    cache = StaticKVCache.from_config(
+        SMALL, 2, max_seq_len=prompt_length + new_tokens - 2, dtype=torch.float64
+    )
+    with pytest.raises(ValueError, match="capacity of 8 tokens.*cache capacity is 7"):
+        generate_greedy_cached(model, random_ids(2, prompt_length), new_tokens, cache=cache)
+    assert calls == []
+
+
+def test_accepts_static_cache_of_exactly_the_needed_capacity(model: GPT) -> None:
+    prompt_length, new_tokens = 5, 4
+    prompt = random_ids(2, prompt_length)
+    cache = StaticKVCache.from_config(
+        SMALL, 2, max_seq_len=prompt_length + new_tokens - 1, dtype=torch.float64
+    )
+    cached = generate_greedy_cached(model, prompt, new_tokens, cache=cache)
+    assert torch.equal(cached, generate_greedy_uncached(model, prompt, new_tokens))
+    assert cache.seq_len == cache.capacity
