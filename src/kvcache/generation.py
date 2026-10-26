@@ -49,17 +49,30 @@ def generate_greedy_cached(
 ) -> Tensor:
     """Greedy decoding with a KV cache: a prefill on the prompt, then one token per step.
 
-    Same contract as `generate_greedy_uncached`. cache must be empty; when it is None a
-    `DynamicKVCache` is created. The last generated token is never fed to the model, so
-    afterwards cache.seq_len is P + max_new_tokens - 1 (0 when max_new_tokens is 0).
+    Same contract as `generate_greedy_uncached`. cache must be empty and have as many
+    layers as the model; when it is None a `DynamicKVCache` is created. The last generated
+    token is never fed to the model, so afterwards cache.seq_len is P + max_new_tokens - 1
+    (0 when max_new_tokens is 0), and that is also the capacity the cache needs. Every
+    check runs before the first forward pass.
     """
     _validate_generation_args(model, input_ids, max_new_tokens)
     if cache is None:
         cache = DynamicKVCache(model.config.n_layer)
     elif cache.seq_len != 0:
         raise ValueError(f"cache must be empty, it holds {cache.seq_len} tokens")
+    if cache.n_layer != model.config.n_layer:
+        raise ValueError(
+            f"cache has {cache.n_layer} layers but the model has {model.config.n_layer}"
+        )
     if max_new_tokens == 0:
         return input_ids.clone()
+    needed = input_ids.shape[1] + max_new_tokens - 1
+    if cache.capacity is not None and needed > cache.capacity:
+        raise ValueError(
+            f"generation needs a cache capacity of {needed} tokens (prompt length "
+            f"{input_ids.shape[1]} + max_new_tokens {max_new_tokens} - 1, the last token "
+            f"never enters the cache), but the cache capacity is {cache.capacity}"
+        )
 
     with torch.inference_mode():
         next_token = model(input_ids, cache=cache)[:, -1, :].argmax(dim=-1, keepdim=True)

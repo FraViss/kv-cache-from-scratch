@@ -116,6 +116,10 @@ class GPT(nn.Module):
         if position_offset < 0:
             raise ValueError(f"position_offset must be >= 0, got {position_offset}")
         if cache is not None:
+            if cache.n_layer != self.config.n_layer:
+                raise ValueError(
+                    f"cache has {cache.n_layer} layers but the model has {self.config.n_layer}"
+                )
             if position_offset != 0:
                 raise ValueError(
                     "position_offset must be 0 when a cache is given: the position "
