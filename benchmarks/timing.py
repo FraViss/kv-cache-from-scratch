@@ -148,12 +148,18 @@ def time_interleaved_staged(
     def invoke(name: str, *, measured: bool) -> None:
         setup, run = cases[name]
         state = setup()
-        if _on_cuda(device):
-            torch.cuda.synchronize()
-        if measured:
-            samples[name].append(_elapsed_s(lambda: run(state), device))
-        else:
-            run(state)
+        try:
+            if _on_cuda(device):
+                torch.cuda.synchronize()
+            if measured:
+                samples[name].append(_elapsed_s(lambda: run(state), device))
+            else:
+                run(state)
+        finally:
+            # Do not let a large cache survive until the next setup. During
+            # round-robin runs that would briefly keep two cases alive and
+            # inflate allocator-reserved memory.
+            del state
 
     for _ in range(warmup):
         for name in names:
