@@ -1,0 +1,419 @@
+{
+  "machine": {
+    "timestamp": "2026-10-27T15:14:33.780789+01:00",
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.13",
+    "torch": "2.11.0+cu128",
+    "torch_cuda": "12.8",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "cpu_count": 20,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+      "total_memory_bytes": 8546484224,
+      "capability": [
+        12,
+        0
+      ]
+    },
+    "nvidia_smi": {
+      "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+      "driver_version": "610.74",
+      "power.limit": null,
+      "power.draw": 10.98,
+      "temperature.gpu": 52,
+      "clocks.sm": 825,
+      "clocks.max.sm": 3090
+    },
+    "float32_matmul_precision": "highest",
+    "allow_tf32_matmul": false,
+    "allow_tf32_cudnn": true,
+    "git_commit": "1c3123e19efbbec46a31c9b154ecbf75e1b5ef2f",
+    "dirty": false
+  },
+  "settings": {
+    "suite": "decode",
+    "device": "cpu",
+    "dtype": "float32",
+    "warmup": 3,
+    "repeats": 10,
+    "steps": 8,
+    "seed": 20261027
+  },
+  "calibration": {
+    "path": "benchmarks/results/calibration.json",
+    "values_used": {
+      "read_bandwidth_GBs": 49.9169588683884,
+      "peak_TFLOPs": 0.5119975888818098,
+      "launch_overhead_us": 0.0
+    }
+  },
+  "nvidia_smi_before": {
+    "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "driver_version": "610.74",
+    "power.limit": null,
+    "power.draw": 10.86,
+    "temperature.gpu": 54,
+    "clocks.sm": 900,
+    "clocks.max.sm": 3090
+  },
+  "nvidia_smi_after": {
+    "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "driver_version": "610.74",
+    "power.limit": null,
+    "power.draw": 10.98,
+    "temperature.gpu": 52,
+    "clocks.sm": 825,
+    "clocks.max.sm": 3090
+  },
+  "duration_s": 249.4437997000059,
+  "suites": {
+    "decode": {
+      "op_context": 512,
+      "opcounts": {
+        "dynamic": {
+          "total": 354,
+          "view": 120,
+          "compute": 234,
+          "by_name": {
+            "aten.add": 25,
+            "aten.arange": 1,
+            "aten.bitwise_not": 12,
+            "aten.cat": 24,
+            "aten.div": 12,
+            "aten.embedding": 2,
+            "aten.gelu": 12,
+            "aten.layer_norm": 25,
+            "aten.linear": 49,
+            "aten.masked_fill": 12,
+            "aten.matmul": 24,
+            "aten.ones": 12,
+            "aten.softmax": 12,
+            "aten.split": 12,
+            "aten.transpose": 60,
+            "aten.tril": 12,
+            "aten.view": 48
+          },
+          "launch_limited_s": 0.0
+        },
+        "static": {
+          "total": 462,
+          "view": 228,
+          "compute": 234,
+          "by_name": {
+            "aten.add": 25,
+            "aten.arange": 1,
+            "aten.bitwise_not": 12,
+            "aten.copy_": 24,
+            "aten.div": 12,
+            "aten.embedding": 2,
+            "aten.gelu": 12,
+            "aten.layer_norm": 25,
+            "aten.linear": 49,
+            "aten.masked_fill": 12,
+            "aten.matmul": 24,
+            "aten.ones": 12,
+            "aten.select": 60,
+            "aten.slice": 48,
+            "aten.softmax": 12,
+            "aten.split": 12,
+            "aten.transpose": 60,
+            "aten.tril": 12,
+            "aten.view": 48
+          },
+          "launch_limited_s": 0.0
+        }
+      },
+      "records": [
+        {
+          "variant": "uncached",
+          "context_len": 64,
+          "steps": 8,
+          "median_s": 0.06993549375,
+          "p25_s": 0.069385740625,
+          "p75_s": 0.071763796875,
+          "roofline_per_token_s": 0.032900505435560785,
+          "mean_flops_per_token": 16844979456.0,
+          "launch_limited_per_step_s": null,
+          "generated_tokens": [
+            [
+              72,
+              12,
+              42,
+              1077,
+              10793,
+              72,
+              12,
+              42
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "dynamic",
+          "context_len": 64,
+          "steps": 8,
+          "median_s": 0.01826306875,
+          "p25_s": 0.017769703125,
+          "p75_s": 0.01987088125,
+          "roofline_per_token_s": 0.010204867835460069,
+          "mean_flops_per_token": 249552384.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              72,
+              12,
+              42,
+              1077,
+              10793,
+              72,
+              12,
+              42
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "static",
+          "context_len": 64,
+          "steps": 8,
+          "median_s": 0.0169096625,
+          "p25_s": 0.01667830625,
+          "p75_s": 0.017981809374999998,
+          "roofline_per_token_s": 0.010008425098917282,
+          "mean_flops_per_token": 249552384.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              72,
+              12,
+              42,
+              1077,
+              10793,
+              72,
+              12,
+              42
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "uncached",
+          "context_len": 256,
+          "steps": 8,
+          "median_s": 0.20514855625,
+          "p25_s": 0.20398337187499999,
+          "p75_s": 0.20786777187500002,
+          "roofline_per_token_s": 0.1300704350296717,
+          "mean_flops_per_token": 66595749120.0,
+          "launch_limited_per_step_s": null,
+          "generated_tokens": [
+            [
+              82,
+              13,
+              785,
+              14,
+              268,
+              14,
+              11195,
+              14
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "dynamic",
+          "context_len": 256,
+          "steps": 8,
+          "median_s": 0.0214562375,
+          "p25_s": 0.020904268750000003,
+          "p75_s": 0.021749184374999998,
+          "roofline_per_token_s": 0.011055627356126578,
+          "mean_flops_per_token": 256630272.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              82,
+              13,
+              785,
+              14,
+              268,
+              14,
+              11195,
+              14
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "static",
+          "context_len": 256,
+          "steps": 8,
+          "median_s": 0.017725556250000003,
+          "p25_s": 0.0172918375,
+          "p75_s": 0.017906884375,
+          "roofline_per_token_s": 0.010292011605806117,
+          "mean_flops_per_token": 256630272.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              82,
+              13,
+              785,
+              14,
+              268,
+              14,
+              11195,
+              14
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "uncached",
+          "context_len": 512,
+          "steps": 8,
+          "median_s": 0.46365990625,
+          "p25_s": 0.45993853125,
+          "p75_s": 0.467979865625,
+          "roofline_per_token_s": 0.2678879160418502,
+          "mean_flops_per_token": 137157967104.0,
+          "launch_limited_per_step_s": null,
+          "generated_tokens": [
+            [
+              378,
+              12,
+              75,
+              4820,
+              2870,
+              12,
+              75,
+              4820
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "dynamic",
+          "context_len": 512,
+          "steps": 8,
+          "median_s": 0.02460750625,
+          "p25_s": 0.024274790625,
+          "p75_s": 0.0247551625,
+          "roofline_per_token_s": 0.012189973383681925,
+          "mean_flops_per_token": 266067456.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              378,
+              12,
+              75,
+              4820,
+              2870,
+              12,
+              75,
+              4820
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "static",
+          "context_len": 512,
+          "steps": 8,
+          "median_s": 0.018330018750000003,
+          "p25_s": 0.01791894375,
+          "p75_s": 0.018566525,
+          "roofline_per_token_s": 0.010670126948324567,
+          "mean_flops_per_token": 266067456.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              378,
+              12,
+              75,
+              4820,
+              2870,
+              12,
+              75,
+              4820
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "uncached",
+          "context_len": 1000,
+          "steps": 8,
+          "median_s": 1.0183293375,
+          "p25_s": 1.01025045,
+          "p75_s": 1.04398796875,
+          "roofline_per_token_s": 0.5567437963263566,
+          "mean_flops_per_token": 285051481344.0,
+          "launch_limited_per_step_s": null,
+          "generated_tokens": [
+            [
+              262,
+              1271,
+              286,
+              661,
+              287,
+              262,
+              995,
+              338
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "dynamic",
+          "context_len": 1000,
+          "steps": 8,
+          "median_s": 0.0252238,
+          "p25_s": 0.024787640625000003,
+          "p75_s": 0.025448953125,
+          "roofline_per_token_s": 0.014352320498709305,
+          "mean_flops_per_token": 284057088.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              262,
+              1271,
+              286,
+              661,
+              287,
+              262,
+              995,
+              338
+            ]
+          ],
+          "sequences_match": true
+        },
+        {
+          "variant": "static",
+          "context_len": 1000,
+          "steps": 8,
+          "median_s": 0.01954838125,
+          "p25_s": 0.019107846875,
+          "p75_s": 0.020084496875,
+          "roofline_per_token_s": 0.011390909320000359,
+          "mean_flops_per_token": 284057088.0,
+          "launch_limited_per_step_s": 0.0,
+          "generated_tokens": [
+            [
+              262,
+              1271,
+              286,
+              661,
+              287,
+              262,
+              995,
+              338
+            ]
+          ],
+          "sequences_match": true
+        }
+      ],
+      "duration_s": 249.4437833999982
+    }
+  }
+}

@@ -1,0 +1,186 @@
+{
+  "machine": {
+    "timestamp": "2026-10-27T15:15:38.446146+01:00",
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.13",
+    "torch": "2.11.0+cu128",
+    "torch_cuda": "12.8",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "cpu_count": 20,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+      "total_memory_bytes": 8546484224,
+      "capability": [
+        12,
+        0
+      ]
+    },
+    "nvidia_smi": {
+      "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+      "driver_version": "610.74",
+      "power.limit": null,
+      "power.draw": 10.7,
+      "temperature.gpu": 53,
+      "clocks.sm": 907,
+      "clocks.max.sm": 3090
+    },
+    "float32_matmul_precision": "highest",
+    "allow_tf32_matmul": false,
+    "allow_tf32_cudnn": true,
+    "git_commit": "1c3123e19efbbec46a31c9b154ecbf75e1b5ef2f",
+    "dirty": true
+  },
+  "settings": {
+    "suite": "prefill",
+    "device": "cpu",
+    "dtype": "float32",
+    "warmup": 3,
+    "repeats": 10,
+    "steps": 8,
+    "seed": 20261027
+  },
+  "calibration": {
+    "path": "benchmarks/results/calibration.json",
+    "values_used": {
+      "read_bandwidth_GBs": 49.9169588683884,
+      "peak_TFLOPs": 0.5119975888818098,
+      "launch_overhead_us": 0.0
+    }
+  },
+  "nvidia_smi_before": {
+    "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "driver_version": "610.74",
+    "power.limit": null,
+    "power.draw": 10.76,
+    "temperature.gpu": 50,
+    "clocks.sm": 900,
+    "clocks.max.sm": 3090
+  },
+  "nvidia_smi_after": {
+    "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+    "driver_version": "610.74",
+    "power.limit": null,
+    "power.draw": 10.7,
+    "temperature.gpu": 53,
+    "clocks.sm": 907,
+    "clocks.max.sm": 3090
+  },
+  "duration_s": 50.535527499974705,
+  "suites": {
+    "prefill": {
+      "records": [
+        {
+          "variant": "uncached",
+          "prompt_len": 64,
+          "median_s": 0.06659335,
+          "p25_s": 0.06580385,
+          "p75_s": 0.071408725,
+          "flops": 15963095040,
+          "achieved_TFLOPs": 0.2397100467238846,
+          "peak_fraction": 0.4681858897957029,
+          "roofline_s": 0.03117806682422667
+        },
+        {
+          "variant": "static",
+          "prompt_len": 64,
+          "median_s": 0.06967315,
+          "p25_s": 0.06749322499999999,
+          "p75_s": 0.073950225,
+          "flops": 15963095040,
+          "achieved_TFLOPs": 0.22911401364801218,
+          "peak_fraction": 0.44749041523494587,
+          "roofline_s": 0.03117806682422667
+        },
+        {
+          "variant": "uncached",
+          "prompt_len": 128,
+          "median_s": 0.12999535,
+          "p25_s": 0.12810002499999998,
+          "p75_s": 0.132220725,
+          "flops": 32228179968,
+          "achieved_TFLOPs": 0.24791794451109211,
+          "peak_fraction": 0.4842170156553644,
+          "roofline_s": 0.06294596042607457
+        },
+        {
+          "variant": "static",
+          "prompt_len": 128,
+          "median_s": 0.1312846,
+          "p25_s": 0.1297688,
+          "p75_s": 0.13395625,
+          "flops": 32228179968,
+          "achieved_TFLOPs": 0.2454833237714096,
+          "peak_fraction": 0.4794618746301895,
+          "roofline_s": 0.06294596042607457
+        },
+        {
+          "variant": "uncached",
+          "prompt_len": 256,
+          "median_s": 0.20136135,
+          "p25_s": 0.199578275,
+          "p75_s": 0.20234352500000002,
+          "flops": 65664319488,
+          "achieved_TFLOPs": 0.3261019033096471,
+          "peak_fraction": 0.6369207792986793,
+          "roofline_s": 0.12825122796263408
+        },
+        {
+          "variant": "static",
+          "prompt_len": 256,
+          "median_s": 0.2087731,
+          "p25_s": 0.20165097499999998,
+          "p75_s": 0.21221247499999998,
+          "flops": 65664319488,
+          "achieved_TFLOPs": 0.3145248094127069,
+          "peak_fraction": 0.6143091612982424,
+          "roofline_s": 0.12825122796263408
+        },
+        {
+          "variant": "uncached",
+          "prompt_len": 512,
+          "median_s": 0.460586,
+          "p25_s": 0.44701114999999997,
+          "p75_s": 0.4837502,
+          "flops": 136160477184,
+          "achieved_TFLOPs": 0.2956244375295819,
+          "peak_fraction": 0.57739419862351,
+          "roofline_s": 0.26593968436720794
+        },
+        {
+          "variant": "static",
+          "prompt_len": 512,
+          "median_s": 0.47032284999999996,
+          "p25_s": 0.44466067499999995,
+          "p75_s": 0.4793345,
+          "flops": 136160477184,
+          "achieved_TFLOPs": 0.2895042781442578,
+          "peak_fraction": 0.5654407060324796,
+          "roofline_s": 0.26593968436720794
+        },
+        {
+          "variant": "uncached",
+          "prompt_len": 1024,
+          "median_s": 1.0530697500000001,
+          "p25_s": 1.0340364,
+          "p75_s": 1.084184925,
+          "flops": 291648307200,
+          "achieved_TFLOPs": 0.2769506076876674,
+          "peak_fraction": 0.5409217029566892,
+          "roofline_s": 0.569628282502175
+        },
+        {
+          "variant": "static",
+          "prompt_len": 1024,
+          "median_s": 1.0469332,
+          "p25_s": 1.02596825,
+          "p75_s": 1.1094945250000001,
+          "flops": 291648307200,
+          "achieved_TFLOPs": 0.278573940725158,
+          "peak_fraction": 0.5440922902265158,
+          "roofline_s": 0.569628282502175
+        }
+      ],
+      "duration_s": 50.53551060007885
+    }
+  }
+}
