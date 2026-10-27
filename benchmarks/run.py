@@ -27,7 +27,7 @@ from benchmarks.gpu import heat_up, nvidia_smi_snapshot
 from benchmarks.machine import machine_info, require_clean_tree, set_benchmark_numerics
 from benchmarks.opcount import count_ops
 from benchmarks.timing import Measurement, time_interleaved_staged
-from kvcache import GPT, load_pretrained_gpt2
+from kvcache import GPT, GPT2Config, load_pretrained_gpt2
 from kvcache.cache import DynamicKVCache, KVCache, StaticKVCache
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -497,8 +497,147 @@ def run_memory_suite(
     return {"records": records}
 
 
+def _time_host_interleaved_staged(
+    cases: dict[str, tuple[Callable[[], object], Callable[[object], object]]],
+    device: torch.device,
+    warmup: int,
+    repeats: int,
+) -> dict[str, Measurement]:
+    """Measure CPU enqueue time, synchronizing only outside the timed region."""
+    samples: dict[str, list[float]] = {name: [] for name in cases}
+
+    def invoke(name: str, measured: bool) -> None:
+        setup, run = cases[name]
+        state = setup()
+        try:
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+            if measured:
+                started = time.perf_counter_ns()
+                run(state)
+                samples[name].append((time.perf_counter_ns() - started) / 1e9)
+            else:
+                run(state)
+            # Intentionally outside perf_counter: host time is the time needed
+            # to enqueue the work, not the time needed for the GPU to finish it.
+            if device.type == "cuda":
+                torch.cuda.synchronize()
+        finally:
+            del state
+
+    for _ in range(warmup):
+        for name in cases:
+            invoke(name, measured=False)
+    for _ in range(repeats):
+        for name in cases:
+            invoke(name, measured=True)
+    return {name: Measurement(tuple(values)) for name, values in samples.items()}
+
+
+def run_overhead_suite(
+    pretrained_model: GPT,
+    structural_model: GPT,
+    device: str | torch.device,
+    dtype: torch.dtype,
+    *,
+    context: int = 512,
+    steps: int = 16,
+    warmup: int = 3,
+    repeats: int = 10,
+) -> dict[str, Any]:
+    """Separate host/dispatch overhead from useful GPU work during decode.
+
+    The structural model has the same 12-layer control flow as GPT-2 small but
+    tiny matrices, so its CUDA-event time approximates the Python, dispatcher,
+    launch and small-kernel floor. Host timings stop before synchronization.
+    """
+    resolved = torch.device(device)
+    models = {
+        "pretrained": pretrained_model,
+        "structural": structural_model,
+    }
+    prompts = {
+        name: _prompt(model, 1, context, resolved)
+        for name, model in models.items()
+    }
+    cases: dict[str, tuple[Callable[[], object], Callable[[object], object]]] = {}
+    for model_name, model in models.items():
+        for variant in ("dynamic", "static"):
+            case_name = f"{model_name}:{variant}"
+
+            def setup(
+                model: GPT = model,
+                model_name: str = model_name,
+                variant: str = variant,
+            ) -> tuple[KVCache, Tensor]:
+                _clear_cuda_cache(resolved)
+                return _setup_cached(
+                    model, prompts[model_name], variant, dtype, resolved
+                )
+
+            def run(state: object, model: GPT = model) -> Tensor:
+                assert isinstance(state, tuple)
+                return _run_cached(model, state, steps)
+
+            cases[case_name] = (setup, run)
+
+    total = time_interleaved_staged(cases, resolved, warmup, repeats)
+    host = _time_host_interleaved_staged(cases, resolved, warmup, repeats)
+    opcounts = {
+        model_name: _decode_opcounts(
+            model, dtype, resolved, context, launch_overhead_us=0.0
+        )
+        for model_name, model in models.items()
+    }
+    per_token = {
+        name: measurement.median_s / steps for name, measurement in total.items()
+    }
+    records: list[dict[str, Any]] = []
+    for model_name in models:
+        for variant in ("dynamic", "static"):
+            case_name = f"{model_name}:{variant}"
+            total_summary = _measurement(total[case_name], steps)
+            host_summary = _measurement(host[case_name], steps)
+            structural_name = f"structural:{variant}"
+            structural_ops = opcounts["structural"][variant]["total"]
+            structural_cost = per_token[structural_name] / structural_ops
+            records.append(
+                {
+                    "model": model_name,
+                    "variant": variant,
+                    "context_len": context,
+                    "steps": steps,
+                    "total_median_s_per_token": total_summary["median_s"],
+                    "total_p25_s_per_token": total_summary["p25_s"],
+                    "total_p75_s_per_token": total_summary["p75_s"],
+                    "host_median_s_per_token": host_summary["median_s"],
+                    "host_p25_s_per_token": host_summary["p25_s"],
+                    "host_p75_s_per_token": host_summary["p75_s"],
+                    "host_to_total_ratio": (
+                        host_summary["median_s"] / total_summary["median_s"]
+                    ),
+                    "ops": opcounts[model_name][variant],
+                    "structural_cost_per_op_s": structural_cost,
+                    "gpu_work_delta_vs_structural_s_per_token": (
+                        per_token[case_name] - per_token[structural_name]
+                    ),
+                }
+            )
+    return {
+        "structural_config": {
+            "vocab_size": structural_model.config.vocab_size,
+            "n_positions": structural_model.config.n_positions,
+            "n_embd": structural_model.config.n_embd,
+            "n_layer": structural_model.config.n_layer,
+            "n_head": structural_model.config.n_head,
+        },
+        "records": records,
+    }
+
+
 def run_suites(
     model: GPT,
+    structural_model: GPT | None,
     suite: str,
     device: str | torch.device,
     dtype: torch.dtype,
@@ -516,10 +655,15 @@ def run_suites(
     memory_new_tokens: int = 992,
     memory_sample_every: int = 32,
     op_context: int = 512,
+    overhead_context: int = 512,
 ) -> dict[str, Any]:
     """Run selected suites. Small dimensions can be injected by unit tests."""
     resolved = torch.device(device)
-    selected = ("decode", "batch", "prefill", "memory") if suite == "all" else (suite,)
+    selected = (
+        ("decode", "batch", "prefill", "memory", "overhead")
+        if suite == "all"
+        else (suite,)
+    )
     results: dict[str, Any] = {}
     for name in selected:
         started = time.perf_counter()
@@ -567,6 +711,19 @@ def run_suites(
                 new_tokens=memory_new_tokens,
                 sample_every=memory_sample_every,
             )
+        elif name == "overhead":
+            if structural_model is None:
+                raise ValueError("overhead suite requires a structural model")
+            results[name] = run_overhead_suite(
+                model,
+                structural_model,
+                resolved,
+                dtype,
+                context=overhead_context,
+                steps=steps,
+                warmup=warmup,
+                repeats=repeats,
+            )
         else:
             raise ValueError(f"unknown suite {name!r}")
         results[name]["duration_s"] = time.perf_counter() - started
@@ -577,7 +734,7 @@ def validate_benchmark_request(suite: str, device: str, dtype: str) -> None:
     """Reject CLI combinations excluded by ADR-0009 or by a suite's contract."""
     if device == "cpu" and dtype == "bfloat16":
         raise ValueError("bfloat16 on CPU is rejected by ADR-0009; use float32")
-    if device == "cpu" and suite in ("batch", "memory"):
+    if device == "cpu" and suite in ("batch", "memory", "overhead"):
         raise ValueError(f"{suite} suite requires CUDA")
     if device == "cpu" and suite == "all":
         raise ValueError("--suite all includes CUDA-only batch and memory suites")
@@ -586,7 +743,9 @@ def validate_benchmark_request(suite: str, device: str, dtype: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--suite", choices=("decode", "batch", "prefill", "memory", "all"), required=True
+        "--suite",
+        choices=("decode", "batch", "prefill", "memory", "overhead", "all"),
+        required=True,
     )
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
     parser.add_argument("--dtype", choices=("float32", "bfloat16"), required=True)
@@ -610,11 +769,28 @@ def main() -> None:
     calibration_payload = json.loads(CALIBRATION_PATH.read_text(encoding="utf-8"))
     calibration = _calibration_values(calibration_payload, device, dtype)
     model = load_pretrained_gpt2(dtype=dtype, device=device)
+    structural_model = None
+    if args.suite in ("overhead", "all"):
+        torch.manual_seed(SEED)
+        if device.type == "cuda":
+            torch.cuda.manual_seed_all(SEED)
+        with torch.device(device):
+            structural_model = GPT(
+                GPT2Config(
+                    vocab_size=256,
+                    n_positions=1024,
+                    n_embd=48,
+                    n_layer=12,
+                    n_head=12,
+                )
+            ).to(dtype)
+        structural_model.eval()
     heat_up(device)
     before = nvidia_smi_snapshot()
     started = time.perf_counter()
     results = run_suites(
         model,
+        structural_model,
         args.suite,
         device,
         dtype,
