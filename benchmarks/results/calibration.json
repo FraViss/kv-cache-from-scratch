@@ -7,7 +7,7 @@
     "time_base": "quartiles are taken on the per-sample rates, not on the times"
   },
   "machine": {
-    "timestamp": "2026-10-26T14:49:02.320802+01:00",
+    "timestamp": "2026-10-27T15:48:35.271182+01:00",
     "os": "Windows-11-10.0.26200-SP0",
     "python": "3.12.13",
     "torch": "2.11.0+cu128",
@@ -26,16 +26,17 @@
       "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
       "driver_version": "610.74",
       "power.limit": null,
-      "power.draw": 11.11,
-      "temperature.gpu": 45,
-      "clocks.sm": 1012,
+      "power.draw": 3.7,
+      "temperature.gpu": 49,
+      "clocks.sm": 180,
       "clocks.max.sm": 3090
     },
     "float32_matmul_precision": "highest",
     "allow_tf32_matmul": false,
     "allow_tf32_cudnn": true,
-    "git_commit": "4817e79e801e9802f1df45242728c192890de995",
-    "dirty": false
+    "git_commit": "0274162b6f45c091f3e5e91b6fbacde6ee6cbadd",
+    "dirty": false,
+    "dirty_outside_results": false
   },
   "settings": {
     "warmup": 5,
@@ -43,6 +44,7 @@
     "copy_bytes": 1073741824,
     "matmul_n": 4096,
     "launch_calls": 1000,
+    "allow_dirty": false,
     "copy_dtype": "float32",
     "read_op": "sum",
     "matmul_flop": "2 * n**3"
@@ -50,48 +52,48 @@
   "results": {
     "cpu": {
       "copy_bandwidth_GBs": {
-        "median": 45.004356353790776,
-        "p25": 43.86361703033945,
-        "p75": 46.08447427125179
+        "median": 38.78110664934733,
+        "p25": 37.57655330889589,
+        "p75": 41.07660984378414
       },
       "read_bandwidth_GBs": {
-        "median": 49.9169588683884,
-        "p25": 48.156341570420906,
-        "p75": 50.94100736270613
+        "median": 45.334733471900705,
+        "p25": 43.17180121303546,
+        "p75": 47.58385291134756
       },
       "matmul_f32_TFLOPs": {
-        "median": 0.5119975888818098,
-        "p25": 0.5103574216222614,
-        "p75": 0.5134164676796596
+        "median": 0.4705044003173805,
+        "p25": 0.45295095525937196,
+        "p75": 0.4849328711630578
       },
-      "ridge_point_flop_per_byte": 10.256986813474521
+      "ridge_point_flop_per_byte": 10.378452993641348
     },
     "cuda": {
       "copy_bandwidth_GBs": {
-        "median": 255.28862669338451,
-        "p25": 227.57050382768344,
-        "p75": 259.8092887692465
+        "median": 256.2493112506421,
+        "p25": 255.0223096679951,
+        "p75": 262.5119859300732
       },
       "read_bandwidth_GBs": {
-        "median": 314.93353013570896,
-        "p25": 308.6510821227396,
-        "p75": 321.76739256729115
+        "median": 337.61389768175377,
+        "p25": 331.9479247644435,
+        "p75": 340.95364297749074
       },
       "matmul_f32_TFLOPs": {
-        "median": 7.755032743876239,
-        "p25": 7.348862532893978,
-        "p75": 9.000807150790868
+        "median": 8.144134371014264,
+        "p25": 8.04852280600847,
+        "p75": 8.185091839547773
       },
-      "ridge_point_flop_per_byte": 24.624347685476657,
+      "ridge_point_flop_per_byte": 24.12262773226,
       "matmul_bf16_TFLOPs": {
-        "median": 32.43202588537757,
-        "p25": 31.58362086801026,
-        "p75": 32.78726770321579
+        "median": 30.78508128412691,
+        "p25": 30.047813166752444,
+        "p75": 31.278914508541696
       },
       "launch_overhead_us": {
-        "median": 12.674144268035889,
-        "p25": 12.212143659591673,
-        "p75": 13.81596827507019
+        "median": 16.502352237701416,
+        "p25": 13.707095861434937,
+        "p75": 21.442647457122803
       }
     }
   },
@@ -99,9 +101,9 @@
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 56.3,
-    "temperature.gpu": 58,
-    "clocks.sm": 1777,
+    "power.draw": 27.14,
+    "temperature.gpu": 56,
+    "clocks.sm": 2040,
     "clocks.max.sm": 3090
   }
 }

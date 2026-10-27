@@ -1,6 +1,6 @@
 {
   "machine": {
-    "timestamp": "2026-10-27T15:23:35.364750+01:00",
+    "timestamp": "2026-10-27T15:56:41.383836+01:00",
     "os": "Windows-11-10.0.26200-SP0",
     "python": "3.12.13",
     "torch": "2.11.0+cu128",
@@ -19,16 +19,17 @@
       "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
       "driver_version": "610.74",
       "power.limit": null,
-      "power.draw": 32.22,
+      "power.draw": 27.29,
       "temperature.gpu": 59,
-      "clocks.sm": 540,
+      "clocks.sm": 2422,
       "clocks.max.sm": 3090
     },
     "float32_matmul_precision": "highest",
     "allow_tf32_matmul": false,
     "allow_tf32_cudnn": true,
-    "git_commit": "d761703d28c9d724331915161b6146446bfef698",
-    "dirty": true
+    "git_commit": "0274162b6f45c091f3e5e91b6fbacde6ee6cbadd",
+    "dirty": true,
+    "dirty_outside_results": false
   },
   "settings": {
     "suite": "all",
@@ -37,35 +38,36 @@
     "warmup": 3,
     "repeats": 10,
     "steps": 16,
-    "seed": 20261027
+    "seed": 20261027,
+    "allow_dirty": false
   },
   "calibration": {
     "path": "benchmarks/results/calibration.json",
     "values_used": {
-      "read_bandwidth_GBs": 314.93353013570896,
-      "peak_TFLOPs": 32.43202588537757,
-      "launch_overhead_us": 12.674144268035889
+      "read_bandwidth_GBs": 337.61389768175377,
+      "peak_TFLOPs": 30.78508128412691,
+      "launch_overhead_us": 16.502352237701416
     }
   },
   "nvidia_smi_before": {
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 69.25,
-    "temperature.gpu": 67,
-    "clocks.sm": 2040,
+    "power.draw": 71.31,
+    "temperature.gpu": 68,
+    "clocks.sm": 1987,
     "clocks.max.sm": 3090
   },
   "nvidia_smi_after": {
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 41.2,
-    "temperature.gpu": 63,
-    "clocks.sm": 2790,
+    "power.draw": 30.72,
+    "temperature.gpu": 61,
+    "clocks.sm": 2805,
     "clocks.max.sm": 3090
   },
-  "duration_s": 145.02659740007948,
+  "duration_s": 174.36453420005273,
   "suites": {
     "decode": {
       "op_context": 512,
@@ -93,7 +95,7 @@
             "aten.tril": 12,
             "aten.view": 48
           },
-          "launch_limited_s": 0.002965749758720398
+          "launch_limited_s": 0.0038615504236221313
         },
         "static": {
           "total": 462,
@@ -120,7 +122,7 @@
             "aten.tril": 12,
             "aten.view": 48
           },
-          "launch_limited_s": 0.002965749758720398
+          "launch_limited_s": 0.0038615504236221313
         }
       },
       "records": [
@@ -128,10 +130,10 @@
           "variant": "uncached",
           "context_len": 64,
           "steps": 16,
-          "median_s": 0.010207664012908936,
-          "p25_s": 0.009827872276306153,
-          "p75_s": 0.0112082679271698,
-          "roofline_per_token_s": 0.0007852665033584461,
+          "median_s": 0.015111761093139648,
+          "p25_s": 0.012881656408309936,
+          "p75_s": 0.01659441375732422,
+          "roofline_per_token_s": 0.0007325135419428725,
           "mean_flops_per_token": 17854321920.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
@@ -160,12 +162,12 @@
           "variant": "dynamic",
           "context_len": 64,
           "steps": 16,
-          "median_s": 0.010328217029571533,
-          "p25_s": 0.009249639987945556,
-          "p75_s": 0.011587722778320313,
-          "roofline_per_token_s": 0.0008101403235471837,
+          "median_s": 0.013643636226654054,
+          "p25_s": 0.012228329896926881,
+          "p75_s": 0.016049194812774656,
+          "roofline_per_token_s": 0.000755716378241348,
           "mean_flops_per_token": 249699840.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               290,
@@ -192,12 +194,12 @@
           "variant": "static",
           "context_len": 64,
           "steps": 16,
-          "median_s": 0.011091509819030763,
-          "p25_s": 0.00969301438331604,
-          "p75_s": 0.012199668884277343,
-          "roofline_per_token_s": 0.0007936358122690095,
+          "median_s": 0.013837563037872314,
+          "p25_s": 0.011762622833251954,
+          "p75_s": 0.018097665309906006,
+          "roofline_per_token_s": 0.0007403206139209478,
           "mean_flops_per_token": 249699840.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               290,
@@ -224,10 +226,10 @@
           "variant": "uncached",
           "context_len": 128,
           "steps": 16,
-          "median_s": 0.011293572902679443,
-          "p25_s": 0.009801461458206175,
-          "p75_s": 0.01223341989517212,
-          "roofline_per_token_s": 0.0010531194199434567,
+          "median_s": 0.014511291027069093,
+          "p25_s": 0.010686073541641236,
+          "p75_s": 0.016775603294372558,
+          "roofline_per_token_s": 0.001109459350546219,
           "mean_flops_per_token": 34154796288.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
@@ -256,12 +258,12 @@
           "variant": "dynamic",
           "context_len": 128,
           "steps": 16,
-          "median_s": 0.010344128131866455,
-          "p25_s": 0.009693393230438233,
-          "p75_s": 0.011601330995559692,
-          "roofline_per_token_s": 0.0008326145516706549,
+          "median_s": 0.015750116825103758,
+          "p25_s": 0.012547415256500244,
+          "p75_s": 0.016713603496551516,
+          "roofline_per_token_s": 0.0007766808232733824,
           "mean_flops_per_token": 252059136.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               286,
@@ -288,12 +290,12 @@
           "variant": "static",
           "context_len": 128,
           "steps": 16,
-          "median_s": 0.011258749008178711,
-          "p25_s": 0.010844039678573609,
-          "p75_s": 0.01259286427497864,
-          "roofline_per_token_s": 0.0008011272216435,
+          "median_s": 0.01557883596420288,
+          "p25_s": 0.013816266775131225,
+          "p75_s": 0.017721370220184326,
+          "roofline_per_token_s": 0.0007473087622649592,
           "mean_flops_per_token": 252059136.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               286,
@@ -320,10 +322,10 @@
           "variant": "uncached",
           "context_len": 256,
           "steps": 16,
-          "median_s": 0.009241876125335693,
-          "p25_s": 0.009061495065689087,
-          "p75_s": 0.009596126794815063,
-          "roofline_per_token_s": 0.002086262354597658,
+          "median_s": 0.010363109111785888,
+          "p25_s": 0.009488940954208373,
+          "p75_s": 0.011226926565170287,
+          "roofline_per_token_s": 0.002197873510988163,
           "mean_flops_per_token": 67661714688.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
@@ -352,12 +354,12 @@
           "variant": "dynamic",
           "context_len": 256,
           "steps": 16,
-          "median_s": 0.009113376140594483,
-          "p25_s": 0.00879215145111084,
-          "p75_s": 0.009813099145889282,
-          "roofline_per_token_s": 0.0008775630079175972,
+          "median_s": 0.010897212028503418,
+          "p25_s": 0.010590785264968872,
+          "p75_s": 0.011829286098480225,
+          "roofline_per_token_s": 0.000818609713337451,
           "mean_flops_per_token": 256777728.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               12,
@@ -384,12 +386,12 @@
           "variant": "static",
           "context_len": 256,
           "steps": 16,
-          "median_s": 0.009536101341247558,
-          "p25_s": 0.00930056381225586,
-          "p75_s": 0.010170154809951783,
-          "roofline_per_token_s": 0.0008161100403924807,
+          "median_s": 0.010827566623687744,
+          "p25_s": 0.009908150672912598,
+          "p75_s": 0.011616879940032961,
+          "roofline_per_token_s": 0.0007612850589529821,
           "mean_flops_per_token": 256777728.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               12,
@@ -416,10 +418,10 @@
           "variant": "uncached",
           "context_len": 512,
           "steps": 16,
-          "median_s": 0.011682567119598388,
-          "p25_s": 0.01136232089996338,
-          "p75_s": 0.011942965507507324,
-          "roofline_per_token_s": 0.004264285883120062,
+          "median_s": 0.012694989204406738,
+          "p25_s": 0.011410529851913452,
+          "p75_s": 0.015597573518753054,
+          "roofline_per_token_s": 0.0044924172480684185,
           "mean_flops_per_token": 138299430144.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
@@ -448,12 +450,12 @@
           "variant": "dynamic",
           "context_len": 512,
           "steps": 16,
-          "median_s": 0.011790330410003661,
-          "p25_s": 0.010373839855194092,
-          "p75_s": 0.013030209302902222,
-          "roofline_per_token_s": 0.0009674599204114818,
+          "median_s": 0.012287836074829101,
+          "p25_s": 0.00998725461959839,
+          "p75_s": 0.01553490090370178,
+          "roofline_per_token_s": 0.0009024674934655885,
           "mean_flops_per_token": 266214912.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               3898,
@@ -480,12 +482,12 @@
           "variant": "static",
           "context_len": 512,
           "steps": 16,
-          "median_s": 0.010640487194061278,
-          "p25_s": 0.010166104316711427,
-          "p75_s": 0.011030385255813598,
-          "roofline_per_token_s": 0.0008460756778904423,
+          "median_s": 0.010922630786895753,
+          "p25_s": 0.010258283138275147,
+          "p75_s": 0.011948025703430176,
+          "roofline_per_token_s": 0.000789237652329028,
           "mean_flops_per_token": 266214912.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               3898,
@@ -512,10 +514,10 @@
           "variant": "uncached",
           "context_len": 768,
           "steps": 16,
-          "median_s": 0.01642509651184082,
-          "p25_s": 0.016336513519287107,
-          "p75_s": 0.016554279804229736,
-          "roofline_per_token_s": 0.006591292957261135,
+          "median_s": 0.0163985538482666,
+          "p25_s": 0.01628803873062134,
+          "p75_s": 0.01669207525253296,
+          "roofline_per_token_s": 0.006943914873410498,
           "mean_flops_per_token": 213768983808.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
@@ -544,12 +546,12 @@
           "variant": "dynamic",
           "context_len": 768,
           "steps": 16,
-          "median_s": 0.01286885404586792,
-          "p25_s": 0.011326857089996338,
-          "p75_s": 0.013917795181274412,
-          "roofline_per_token_s": 0.0010573568329053664,
+          "median_s": 0.012782163143157959,
+          "p25_s": 0.011136664628982544,
+          "p75_s": 0.01371124219894409,
+          "roofline_per_token_s": 0.000986325273593726,
           "mean_flops_per_token": 275652096.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               38,
@@ -576,12 +578,12 @@
           "variant": "static",
           "context_len": 768,
           "steps": 16,
-          "median_s": 0.011810554027557374,
-          "p25_s": 0.011053769826889038,
-          "p75_s": 0.01394598174095154,
-          "roofline_per_token_s": 0.0008760413153884038,
+          "median_s": 0.013439841270446777,
+          "p25_s": 0.011531567335128784,
+          "p75_s": 0.015541082620620728,
+          "roofline_per_token_s": 0.0008171902457050738,
           "mean_flops_per_token": 275652096.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               38,
@@ -608,10 +610,10 @@
           "variant": "uncached",
           "context_len": 1000,
           "steps": 16,
-          "median_s": 0.02395846176147461,
-          "p25_s": 0.023839595794677735,
-          "p75_s": 0.02407194471359253,
-          "roofline_per_token_s": 0.008828830565564483,
+          "median_s": 0.024139509201049805,
+          "p25_s": 0.02390877342224121,
+          "p75_s": 0.024214263916015624,
+          "roofline_per_token_s": 0.009301156582868536,
           "mean_flops_per_token": 286336861440.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
@@ -640,12 +642,12 @@
           "variant": "dynamic",
           "context_len": 1000,
           "steps": 16,
-          "median_s": 0.01022645092010498,
-          "p25_s": 0.009649709939956664,
-          "p75_s": 0.010693727731704713,
-          "roofline_per_token_s": 0.0011388259098529493,
+          "median_s": 0.009673542976379394,
+          "p25_s": 0.00935888457298279,
+          "p75_s": 0.009958155393600463,
+          "roofline_per_token_s": 0.0010623213868348506,
           "mean_flops_per_token": 284204544.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               621,
@@ -672,12 +674,12 @@
           "variant": "static",
           "context_len": 1000,
           "steps": 16,
-          "median_s": 0.010878020286560059,
-          "p25_s": 0.010494012832641602,
-          "p75_s": 0.011687221527099612,
-          "roofline_per_token_s": 0.0009031976743709314,
+          "median_s": 0.010391791820526124,
+          "p25_s": 0.009663222789764404,
+          "p75_s": 0.011173534631729126,
+          "roofline_per_token_s": 0.0008425222834521152,
           "mean_flops_per_token": 284204544.0,
-          "launch_limited_per_step_s": 0.002965749758720398,
+          "launch_limited_per_step_s": 0.0038615504236221313,
           "generated_tokens": [
             [
               621,
@@ -701,7 +703,7 @@
           "sequences_match": true
         }
       ],
-      "duration_s": 49.62695619999431
+      "duration_s": 56.2045127999736
     },
     "batch": {
       "records": [
@@ -711,13 +713,13 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.18465499114990236,
-          "p25_s": 0.17685683822631837,
-          "p75_s": 0.20057341003417967,
-          "tokens_per_s": 86.64807758708915,
-          "roofline_per_step_s": 0.0009674599204114818,
-          "max_memory_allocated": 290259968,
-          "max_memory_reserved": 501219328,
+          "median_s": 0.1818949737548828,
+          "p25_s": 0.14649114990234374,
+          "p75_s": 0.2016386489868164,
+          "tokens_per_s": 87.96284839382756,
+          "roofline_per_step_s": 0.0009024674934655885,
+          "max_memory_allocated": 291096576,
+          "max_memory_reserved": 509607936,
           "cache_nbytes": 19427328,
           "cache_used_nbytes": 19427328
         },
@@ -727,13 +729,13 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.17060707092285154,
-          "p25_s": 0.1646051712036133,
-          "p75_s": 0.17443036270141601,
-          "tokens_per_s": 93.78274835534334,
-          "roofline_per_step_s": 0.0008460756778904423,
-          "max_memory_allocated": 307061760,
-          "max_memory_reserved": 476053504,
+          "median_s": 0.15348900604248045,
+          "p25_s": 0.15111788940429688,
+          "p75_s": 0.16199725723266603,
+          "tokens_per_s": 104.2419936941396,
+          "roofline_per_step_s": 0.000789237652329028,
+          "max_memory_allocated": 307898368,
+          "max_memory_reserved": 478150656,
           "cache_nbytes": 37748736,
           "cache_used_nbytes": 19427328
         },
@@ -743,12 +745,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.1849661331176758,
-          "p25_s": 0.16158681488037108,
-          "p75_s": 0.2062710838317871,
-          "tokens_per_s": 173.00464393469016,
-          "roofline_per_step_s": 0.0011496533374645173,
-          "max_memory_allocated": 312643072,
+          "median_s": 0.22007609558105468,
+          "p25_s": 0.18082585906982424,
+          "p75_s": 0.22658041763305664,
+          "tokens_per_s": 145.4042517226243,
+          "roofline_per_step_s": 0.0010724214449883045,
+          "max_memory_allocated": 313479680,
           "max_memory_reserved": 578813952,
           "cache_nbytes": 38854656,
           "cache_used_nbytes": 38854656
@@ -759,12 +761,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.18741918182373046,
-          "p25_s": 0.17962982940673827,
-          "p75_s": 0.21535764694213866,
-          "tokens_per_s": 170.74026088800403,
-          "roofline_per_step_s": 0.0009068848524224384,
-          "max_memory_allocated": 344918016,
+          "median_s": 0.2162960433959961,
+          "p25_s": 0.19107250976562498,
+          "p75_s": 0.25241885375976564,
+          "tokens_per_s": 147.94537846175118,
+          "roofline_per_step_s": 0.0008459617627151834,
+          "max_memory_allocated": 345754624,
           "max_memory_reserved": 578813952,
           "cache_nbytes": 75497472,
           "cache_used_nbytes": 38854656
@@ -775,12 +777,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.16239221954345703,
-          "p25_s": 0.15987157058715817,
-          "p75_s": 0.16525825500488278,
-          "tokens_per_s": 394.10755133421435,
-          "roofline_per_step_s": 0.0015140401715705888,
-          "max_memory_allocated": 353773056,
+          "median_s": 0.1700408935546875,
+          "p25_s": 0.15021148300170897,
+          "p75_s": 0.18524909973144532,
+          "tokens_per_s": 376.38004989321416,
+          "roofline_per_step_s": 0.0014123293480337367,
+          "max_memory_allocated": 354609664,
           "max_memory_reserved": 681574400,
           "cache_nbytes": 77709312,
           "cache_used_nbytes": 77709312
@@ -791,12 +793,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.178336784362793,
-          "p25_s": 0.17005328369140627,
-          "p75_s": 0.18349675369262697,
-          "tokens_per_s": 358.8715599458377,
-          "roofline_per_step_s": 0.0010285032014864307,
-          "max_memory_allocated": 420631040,
+          "median_s": 0.19003121185302735,
+          "p25_s": 0.17207165908813477,
+          "p75_s": 0.19922625350952147,
+          "tokens_per_s": 336.7867803184797,
+          "roofline_per_step_s": 0.0009594099834874943,
+          "max_memory_allocated": 421467648,
           "max_memory_reserved": 807403520,
           "cache_nbytes": 150994944,
           "cache_used_nbytes": 77709312
@@ -807,12 +809,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.16047515869140624,
-          "p25_s": 0.15153746032714843,
-          "p75_s": 0.16691163635253906,
-          "tokens_per_s": 797.6312411452044,
-          "roofline_per_step_s": 0.0022428138397827314,
-          "max_memory_allocated": 437879296,
+          "median_s": 0.1708795394897461,
+          "p25_s": 0.15904433059692383,
+          "p75_s": 0.17670072555541994,
+          "tokens_per_s": 749.0656890942806,
+          "roofline_per_step_s": 0.002092145154124601,
+          "max_memory_allocated": 438715904,
           "max_memory_reserved": 1038090240,
           "cache_nbytes": 155418624,
           "cache_used_nbytes": 155418624
@@ -823,12 +825,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.17425904083251953,
-          "p25_s": 0.17057705307006837,
-          "p75_s": 0.18831950759887695,
-          "tokens_per_s": 734.5386465372599,
-          "roofline_per_step_s": 0.0012717398996144153,
-          "max_memory_allocated": 572057600,
+          "median_s": 0.18157118225097657,
+          "p25_s": 0.17237560653686523,
+          "p75_s": 0.20810335159301757,
+          "tokens_per_s": 704.9576833347494,
+          "roofline_per_step_s": 0.0011863064250321163,
+          "max_memory_allocated": 572894208,
           "max_memory_reserved": 1239416832,
           "cache_nbytes": 301989888,
           "cache_used_nbytes": 155418624
@@ -839,12 +841,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.16033294677734375,
-          "p25_s": 0.15369540405273438,
-          "p75_s": 0.1882560386657715,
-          "tokens_per_s": 1596.6774461864673,
-          "roofline_per_step_s": 0.0037003611762070165,
-          "max_memory_allocated": 606397440,
+          "median_s": 0.14549063873291015,
+          "p25_s": 0.1403579444885254,
+          "p75_s": 0.15715331268310548,
+          "tokens_per_s": 1759.5633796753173,
+          "roofline_per_step_s": 0.0034517767663063293,
+          "max_memory_allocated": 607234048,
           "max_memory_reserved": 1738539008,
           "cache_nbytes": 310837248,
           "cache_used_nbytes": 310837248
@@ -855,12 +857,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.17015717315673828,
-          "p25_s": 0.16320323181152344,
-          "p75_s": 0.18569972229003906,
-          "tokens_per_s": 1504.491378475056,
-          "roofline_per_step_s": 0.0017582132958703846,
-          "max_memory_allocated": 875661824,
+          "median_s": 0.17264212799072265,
+          "p25_s": 0.1590452995300293,
+          "p75_s": 0.18406746673583985,
+          "tokens_per_s": 1482.836217205089,
+          "roofline_per_step_s": 0.00164009930812136,
+          "max_memory_allocated": 876498432,
           "max_memory_reserved": 2103443456,
           "cache_nbytes": 603979776,
           "cache_used_nbytes": 310837248
@@ -871,12 +873,12 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.2081240005493164,
-          "p25_s": 0.1974075584411621,
-          "p75_s": 0.2109940071105957,
-          "tokens_per_s": 2460.0718737322086,
-          "roofline_per_step_s": 0.006615455849055587,
-          "max_memory_allocated": 943256576,
+          "median_s": 0.2079644317626953,
+          "p25_s": 0.20745743560791013,
+          "p75_s": 0.21092023849487304,
+          "tokens_per_s": 2461.9594594148416,
+          "roofline_per_step_s": 0.006171039990669786,
+          "max_memory_allocated": 944093184,
           "max_memory_reserved": 3229614080,
           "cache_nbytes": 621674496,
           "cache_used_nbytes": 621674496
@@ -887,133 +889,133 @@
           "context_len": 512,
           "steps": 16,
           "out_of_memory": false,
-          "median_s": 0.18129720306396485,
-          "p25_s": 0.1653405876159668,
-          "p75_s": 0.18580186080932617,
-          "tokens_per_s": 2824.0921059292755,
-          "roofline_per_step_s": 0.002731160088382323,
-          "max_memory_allocated": 1480677888,
+          "median_s": 0.17138246154785156,
+          "p25_s": 0.1603168487548828,
+          "p75_s": 0.1804099349975586,
+          "tokens_per_s": 2987.470219390243,
+          "roofline_per_step_s": 0.0025476850742998476,
+          "max_memory_allocated": 1481514496,
           "max_memory_reserved": 3833593856,
           "cache_nbytes": 1207959552,
           "cache_used_nbytes": 621674496
         }
       ],
-      "duration_s": 48.304755500052124
+      "duration_s": 49.342193199903704
     },
     "prefill": {
       "records": [
         {
           "variant": "uncached",
           "prompt_len": 64,
-          "median_s": 0.010401088237762451,
-          "p25_s": 0.009908512115478517,
-          "p75_s": 0.012650423765182496,
+          "median_s": 0.010262608051300049,
+          "p25_s": 0.009707151651382447,
+          "p75_s": 0.011084367752075195,
           "flops": 15963095040,
-          "achieved_TFLOPs": 1.5347523908165674,
-          "peak_fraction": 0.04732212524252245,
-          "roofline_s": 0.0007852665033584461
+          "achieved_TFLOPs": 1.5554618241488647,
+          "peak_fraction": 0.05052648098580386,
+          "roofline_s": 0.0007325135419428725
         },
         {
           "variant": "static",
           "prompt_len": 64,
-          "median_s": 0.010742464065551759,
-          "p25_s": 0.010268312215805053,
-          "p75_s": 0.013372359752655029,
+          "median_s": 0.010665008068084717,
+          "p25_s": 0.010053847789764404,
+          "p75_s": 0.012872848272323607,
           "flops": 15963095040,
-          "achieved_TFLOPs": 1.48598077150562,
-          "peak_fraction": 0.04581831479653557,
-          "roofline_s": 0.0007852665033584461
+          "achieved_TFLOPs": 1.4967728986319224,
+          "peak_fraction": 0.04862007297683093,
+          "roofline_s": 0.0007325135419428725
         },
         {
           "variant": "uncached",
           "prompt_len": 128,
-          "median_s": 0.015751935958862304,
-          "p25_s": 0.013363272190093993,
-          "p75_s": 0.017778687953948977,
+          "median_s": 0.009923359870910645,
+          "p25_s": 0.00909552812576294,
+          "p75_s": 0.01150931167602539,
           "flops": 32228179968,
-          "achieved_TFLOPs": 2.0459821606796136,
-          "peak_fraction": 0.06308524074045196,
-          "roofline_s": 0.0009937146720930105
+          "achieved_TFLOPs": 3.247708476488265,
+          "peak_fraction": 0.1054961800007595,
+          "roofline_s": 0.001046876559153903
         },
         {
           "variant": "static",
           "prompt_len": 128,
-          "median_s": 0.016268191814422607,
-          "p25_s": 0.012327103614807128,
-          "p75_s": 0.01994222402572632,
+          "median_s": 0.011069024085998535,
+          "p25_s": 0.010718592166900635,
+          "p75_s": 0.01149443244934082,
           "flops": 32228179968,
-          "achieved_TFLOPs": 1.9810548299183457,
-          "peak_fraction": 0.061083289613786715,
-          "roofline_s": 0.0009937146720930105
+          "achieved_TFLOPs": 2.911564715878265,
+          "peak_fraction": 0.09457713263792798,
+          "roofline_s": 0.001046876559153903
         },
         {
           "variant": "uncached",
           "prompt_len": 256,
-          "median_s": 0.01905411243438721,
-          "p25_s": 0.01660321593284607,
-          "p75_s": 0.020234623432159423,
+          "median_s": 0.011658079624176025,
+          "p25_s": 0.010729543685913088,
+          "p75_s": 0.01260755968093872,
           "flops": 65664319488,
-          "achieved_TFLOPs": 3.446201953206424,
-          "peak_fraction": 0.10625922553793322,
-          "roofline_s": 0.002024675230590688
+          "achieved_TFLOPs": 5.632515955014422,
+          "peak_fraction": 0.18296251690972803,
+          "roofline_s": 0.002132991590373262
         },
         {
           "variant": "static",
           "prompt_len": 256,
-          "median_s": 0.020706031799316404,
-          "p25_s": 0.016179008722305297,
-          "p75_s": 0.022946152210235597,
+          "median_s": 0.011701695919036866,
+          "p25_s": 0.010777863740921021,
+          "p75_s": 0.012929215669631958,
           "flops": 65664319488,
-          "achieved_TFLOPs": 3.171265268228163,
-          "peak_fraction": 0.0977819048195189,
-          "roofline_s": 0.002024675230590688
+          "achieved_TFLOPs": 5.6115216069812766,
+          "peak_fraction": 0.1822805519072848,
+          "roofline_s": 0.002132991590373262
         },
         {
           "variant": "uncached",
           "prompt_len": 512,
-          "median_s": 0.016385952472686767,
-          "p25_s": 0.012581432104110718,
-          "p75_s": 0.01816067981719971,
+          "median_s": 0.012283663749694824,
+          "p25_s": 0.011272128105163575,
+          "p75_s": 0.014023832082748412,
           "flops": 136160477184,
-          "achieved_TFLOPs": 8.30958575102434,
-          "peak_fraction": 0.2562154390352418,
-          "roofline_s": 0.0041983340068000455
+          "achieved_TFLOPs": 11.084679616647989,
+          "peak_fraction": 0.36006660220719827,
+          "roofline_s": 0.004422937069008347
         },
         {
           "variant": "static",
           "prompt_len": 512,
-          "median_s": 0.01318499231338501,
-          "p25_s": 0.012341487884521484,
-          "p75_s": 0.014710183858871458,
+          "median_s": 0.01343494415283203,
+          "p25_s": 0.012516311883926393,
+          "p75_s": 0.014078752279281617,
           "flops": 136160477184,
-          "achieved_TFLOPs": 10.326928825417209,
-          "peak_fraction": 0.3184176302126488,
-          "roofline_s": 0.0041983340068000455
+          "achieved_TFLOPs": 10.134800385850351,
+          "peak_fraction": 0.32921142199731507,
+          "roofline_s": 0.004422937069008347
         },
         {
           "variant": "uncached",
           "prompt_len": 1024,
-          "median_s": 0.025787471771240238,
-          "p25_s": 0.02485681581497192,
-          "p75_s": 0.027892295837402346,
+          "median_s": 0.02649263954162598,
+          "p25_s": 0.02531569671630859,
+          "p75_s": 0.027664087772369388,
           "flops": 291648307200,
-          "achieved_TFLOPs": 11.309689828735518,
-          "peak_fraction": 0.3487198076588441,
-          "roofline_s": 0.008992602196074766
+          "achieved_TFLOPs": 11.008654186448807,
+          "peak_fraction": 0.3575970478962151,
+          "roofline_s": 0.009473689691063988
         },
         {
           "variant": "static",
           "prompt_len": 1024,
-          "median_s": 0.027093456268310546,
-          "p25_s": 0.024535640239715578,
-          "p75_s": 0.028091920852661132,
+          "median_s": 0.026466784477233884,
+          "p25_s": 0.025591679573059082,
+          "p75_s": 0.028113943576812746,
           "flops": 291648307200,
-          "achieved_TFLOPs": 10.764529424070641,
-          "peak_fraction": 0.33191048447343463,
-          "roofline_s": 0.008992602196074766
+          "achieved_TFLOPs": 11.01940840039972,
+          "peak_fraction": 0.35794637989412864,
+          "roofline_s": 0.009473689691063988
         }
       ],
-      "duration_s": 2.300929099903442
+      "duration_s": 2.005505600012839
     },
     "memory": {
       "records": [
@@ -1023,230 +1025,230 @@
           "prompt_len": 32,
           "new_tokens": 992,
           "out_of_memory": false,
-          "max_memory_allocated": 312544768,
-          "max_memory_reserved": 501219328,
+          "max_memory_allocated": 313381376,
+          "max_memory_reserved": 503316480,
           "snapshots": [
             {
               "generated_tokens": 0,
-              "memory_allocated": 270376448,
+              "memory_allocated": 271213056,
               "memory_reserved": 473956352,
               "cache_nbytes": 1179648,
               "cache_used_nbytes": 1179648
             },
             {
               "generated_tokens": 32,
-              "memory_allocated": 271519232,
+              "memory_allocated": 272355840,
               "memory_reserved": 476053504,
               "cache_nbytes": 2322432,
               "cache_used_nbytes": 2322432
             },
             {
               "generated_tokens": 64,
-              "memory_allocated": 272698880,
+              "memory_allocated": 273535488,
               "memory_reserved": 478150656,
               "cache_nbytes": 3502080,
               "cache_used_nbytes": 3502080
             },
             {
               "generated_tokens": 96,
-              "memory_allocated": 273878528,
+              "memory_allocated": 274715136,
               "memory_reserved": 478150656,
               "cache_nbytes": 4681728,
               "cache_used_nbytes": 4681728
             },
             {
               "generated_tokens": 128,
-              "memory_allocated": 275058176,
+              "memory_allocated": 275894784,
               "memory_reserved": 480247808,
               "cache_nbytes": 5861376,
               "cache_used_nbytes": 5861376
             },
             {
               "generated_tokens": 160,
-              "memory_allocated": 276237824,
+              "memory_allocated": 277074432,
               "memory_reserved": 482344960,
               "cache_nbytes": 7041024,
               "cache_used_nbytes": 7041024
             },
             {
               "generated_tokens": 192,
-              "memory_allocated": 277417472,
+              "memory_allocated": 278254080,
               "memory_reserved": 484442112,
               "cache_nbytes": 8220672,
               "cache_used_nbytes": 8220672
             },
             {
               "generated_tokens": 224,
-              "memory_allocated": 278597120,
+              "memory_allocated": 279433728,
               "memory_reserved": 486539264,
               "cache_nbytes": 9400320,
               "cache_used_nbytes": 9400320
             },
             {
               "generated_tokens": 256,
-              "memory_allocated": 279776768,
+              "memory_allocated": 280613376,
               "memory_reserved": 488636416,
               "cache_nbytes": 10579968,
               "cache_used_nbytes": 10579968
             },
             {
               "generated_tokens": 288,
-              "memory_allocated": 280956416,
+              "memory_allocated": 281793024,
               "memory_reserved": 488636416,
               "cache_nbytes": 11759616,
               "cache_used_nbytes": 11759616
             },
             {
               "generated_tokens": 320,
-              "memory_allocated": 282136064,
+              "memory_allocated": 282972672,
               "memory_reserved": 492830720,
               "cache_nbytes": 12939264,
               "cache_used_nbytes": 12939264
             },
             {
               "generated_tokens": 352,
-              "memory_allocated": 283315712,
-              "memory_reserved": 492830720,
+              "memory_allocated": 284152320,
+              "memory_reserved": 494927872,
               "cache_nbytes": 14118912,
               "cache_used_nbytes": 14118912
             },
             {
               "generated_tokens": 384,
-              "memory_allocated": 284495360,
+              "memory_allocated": 285331968,
               "memory_reserved": 494927872,
               "cache_nbytes": 15298560,
               "cache_used_nbytes": 15298560
             },
             {
               "generated_tokens": 416,
-              "memory_allocated": 285675008,
+              "memory_allocated": 286511616,
               "memory_reserved": 494927872,
               "cache_nbytes": 16478208,
               "cache_used_nbytes": 16478208
             },
             {
               "generated_tokens": 448,
-              "memory_allocated": 286854656,
-              "memory_reserved": 501219328,
+              "memory_allocated": 287691264,
+              "memory_reserved": 503316480,
               "cache_nbytes": 17657856,
               "cache_used_nbytes": 17657856
             },
             {
               "generated_tokens": 480,
-              "memory_allocated": 288034304,
-              "memory_reserved": 501219328,
+              "memory_allocated": 288870912,
+              "memory_reserved": 503316480,
               "cache_nbytes": 18837504,
               "cache_used_nbytes": 18837504
             },
             {
               "generated_tokens": 512,
-              "memory_allocated": 289213952,
-              "memory_reserved": 501219328,
+              "memory_allocated": 290050560,
+              "memory_reserved": 503316480,
               "cache_nbytes": 20017152,
               "cache_used_nbytes": 20017152
             },
             {
               "generated_tokens": 544,
-              "memory_allocated": 290393600,
-              "memory_reserved": 501219328,
+              "memory_allocated": 291230208,
+              "memory_reserved": 503316480,
               "cache_nbytes": 21196800,
               "cache_used_nbytes": 21196800
             },
             {
               "generated_tokens": 576,
-              "memory_allocated": 291573248,
-              "memory_reserved": 501219328,
+              "memory_allocated": 292409856,
+              "memory_reserved": 503316480,
               "cache_nbytes": 22376448,
               "cache_used_nbytes": 22376448
             },
             {
               "generated_tokens": 608,
-              "memory_allocated": 292752896,
-              "memory_reserved": 501219328,
+              "memory_allocated": 293589504,
+              "memory_reserved": 503316480,
               "cache_nbytes": 23556096,
               "cache_used_nbytes": 23556096
             },
             {
               "generated_tokens": 640,
-              "memory_allocated": 293932544,
-              "memory_reserved": 501219328,
+              "memory_allocated": 294769152,
+              "memory_reserved": 503316480,
               "cache_nbytes": 24735744,
               "cache_used_nbytes": 24735744
             },
             {
               "generated_tokens": 672,
-              "memory_allocated": 300613120,
-              "memory_reserved": 501219328,
+              "memory_allocated": 301449728,
+              "memory_reserved": 503316480,
               "cache_nbytes": 25915392,
               "cache_used_nbytes": 25915392
             },
             {
               "generated_tokens": 704,
-              "memory_allocated": 301762048,
-              "memory_reserved": 501219328,
+              "memory_allocated": 302598656,
+              "memory_reserved": 503316480,
               "cache_nbytes": 27095040,
               "cache_used_nbytes": 27095040
             },
             {
               "generated_tokens": 736,
-              "memory_allocated": 303149568,
-              "memory_reserved": 501219328,
+              "memory_allocated": 303986176,
+              "memory_reserved": 503316480,
               "cache_nbytes": 28274688,
               "cache_used_nbytes": 28274688
             },
             {
               "generated_tokens": 768,
-              "memory_allocated": 304676864,
-              "memory_reserved": 501219328,
+              "memory_allocated": 305513472,
+              "memory_reserved": 503316480,
               "cache_nbytes": 29454336,
               "cache_used_nbytes": 29454336
             },
             {
               "generated_tokens": 800,
-              "memory_allocated": 303870976,
-              "memory_reserved": 501219328,
+              "memory_allocated": 304707584,
+              "memory_reserved": 503316480,
               "cache_nbytes": 30633984,
               "cache_used_nbytes": 30633984
             },
             {
               "generated_tokens": 832,
-              "memory_allocated": 305548800,
-              "memory_reserved": 501219328,
+              "memory_allocated": 306385408,
+              "memory_reserved": 503316480,
               "cache_nbytes": 31813632,
               "cache_used_nbytes": 31813632
             },
             {
               "generated_tokens": 864,
-              "memory_allocated": 304859136,
-              "memory_reserved": 501219328,
+              "memory_allocated": 305695744,
+              "memory_reserved": 503316480,
               "cache_nbytes": 32993280,
               "cache_used_nbytes": 32993280
             },
             {
               "generated_tokens": 896,
-              "memory_allocated": 304809984,
-              "memory_reserved": 501219328,
+              "memory_allocated": 305646592,
+              "memory_reserved": 503316480,
               "cache_nbytes": 34172928,
               "cache_used_nbytes": 34172928
             },
             {
               "generated_tokens": 928,
-              "memory_allocated": 305840640,
-              "memory_reserved": 501219328,
+              "memory_allocated": 306677248,
+              "memory_reserved": 503316480,
               "cache_nbytes": 35352576,
               "cache_used_nbytes": 35352576
             },
             {
               "generated_tokens": 960,
-              "memory_allocated": 308374016,
-              "memory_reserved": 501219328,
+              "memory_allocated": 309210624,
+              "memory_reserved": 503316480,
               "cache_nbytes": 36532224,
               "cache_used_nbytes": 36532224
             },
             {
               "generated_tokens": 992,
-              "memory_allocated": 308775936,
-              "memory_reserved": 501219328,
+              "memory_allocated": 309612544,
+              "memory_reserved": 503316480,
               "cache_nbytes": 37711872,
               "cache_used_nbytes": 37711872
             }
@@ -1258,230 +1260,230 @@
           "prompt_len": 32,
           "new_tokens": 992,
           "out_of_memory": false,
-          "max_memory_allocated": 310320640,
-          "max_memory_reserved": 471859200,
+          "max_memory_allocated": 311157248,
+          "max_memory_reserved": 473956352,
           "snapshots": [
             {
               "generated_tokens": 0,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 1179648
             },
             {
               "generated_tokens": 32,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 2322432
             },
             {
               "generated_tokens": 64,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 3502080
             },
             {
               "generated_tokens": 96,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 4681728
             },
             {
               "generated_tokens": 128,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 5861376
             },
             {
               "generated_tokens": 160,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 7041024
             },
             {
               "generated_tokens": 192,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 8220672
             },
             {
               "generated_tokens": 224,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 9400320
             },
             {
               "generated_tokens": 256,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 10579968
             },
             {
               "generated_tokens": 288,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 11759616
             },
             {
               "generated_tokens": 320,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 12939264
             },
             {
               "generated_tokens": 352,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 14118912
             },
             {
               "generated_tokens": 384,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 15298560
             },
             {
               "generated_tokens": 416,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 16478208
             },
             {
               "generated_tokens": 448,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 17657856
             },
             {
               "generated_tokens": 480,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 18837504
             },
             {
               "generated_tokens": 512,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 20017152
             },
             {
               "generated_tokens": 544,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 21196800
             },
             {
               "generated_tokens": 576,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 22376448
             },
             {
               "generated_tokens": 608,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 23556096
             },
             {
               "generated_tokens": 640,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 24735744
             },
             {
               "generated_tokens": 672,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 25915392
             },
             {
               "generated_tokens": 704,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 27095040
             },
             {
               "generated_tokens": 736,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 28274688
             },
             {
               "generated_tokens": 768,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 29454336
             },
             {
               "generated_tokens": 800,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 30633984
             },
             {
               "generated_tokens": 832,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 31813632
             },
             {
               "generated_tokens": 864,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 32993280
             },
             {
               "generated_tokens": 896,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 34172928
             },
             {
               "generated_tokens": 928,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 35352576
             },
             {
               "generated_tokens": 960,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 36532224
             },
             {
               "generated_tokens": 992,
-              "memory_allocated": 306945536,
-              "memory_reserved": 471859200,
+              "memory_allocated": 307782144,
+              "memory_reserved": 473956352,
               "cache_nbytes": 37748736,
               "cache_used_nbytes": 37711872
             }
@@ -1493,229 +1495,229 @@
           "prompt_len": 32,
           "new_tokens": 992,
           "out_of_memory": false,
-          "max_memory_allocated": 596313600,
+          "max_memory_allocated": 597150208,
           "max_memory_reserved": 759169024,
           "snapshots": [
             {
               "generated_tokens": 0,
-              "memory_allocated": 278635520,
+              "memory_allocated": 279472128,
               "memory_reserved": 484442112,
               "cache_nbytes": 9437184,
               "cache_used_nbytes": 9437184
             },
             {
               "generated_tokens": 32,
-              "memory_allocated": 287777792,
-              "memory_reserved": 501219328,
+              "memory_allocated": 288614400,
+              "memory_reserved": 503316480,
               "cache_nbytes": 18579456,
               "cache_used_nbytes": 18579456
             },
             {
               "generated_tokens": 64,
-              "memory_allocated": 303707136,
+              "memory_allocated": 304543744,
               "memory_reserved": 503316480,
               "cache_nbytes": 28016640,
               "cache_used_nbytes": 28016640
             },
             {
               "generated_tokens": 96,
-              "memory_allocated": 309175296,
+              "memory_allocated": 310011904,
               "memory_reserved": 503316480,
               "cache_nbytes": 37453824,
               "cache_used_nbytes": 37453824
             },
             {
               "generated_tokens": 128,
-              "memory_allocated": 316580864,
+              "memory_allocated": 317417472,
               "memory_reserved": 503316480,
               "cache_nbytes": 46891008,
               "cache_used_nbytes": 46891008
             },
             {
               "generated_tokens": 160,
-              "memory_allocated": 327668736,
+              "memory_allocated": 328505344,
               "memory_reserved": 503316480,
               "cache_nbytes": 56328192,
               "cache_used_nbytes": 56328192
             },
             {
               "generated_tokens": 192,
-              "memory_allocated": 336348160,
+              "memory_allocated": 337184768,
               "memory_reserved": 503316480,
               "cache_nbytes": 65765376,
               "cache_used_nbytes": 65765376
             },
             {
               "generated_tokens": 224,
-              "memory_allocated": 345351168,
+              "memory_allocated": 346187776,
               "memory_reserved": 503316480,
               "cache_nbytes": 75202560,
               "cache_used_nbytes": 75202560
             },
             {
               "generated_tokens": 256,
-              "memory_allocated": 353838080,
+              "memory_allocated": 354674688,
               "memory_reserved": 503316480,
               "cache_nbytes": 84639744,
               "cache_used_nbytes": 84639744
             },
             {
               "generated_tokens": 288,
-              "memory_allocated": 364852224,
+              "memory_allocated": 365688832,
               "memory_reserved": 503316480,
               "cache_nbytes": 94076928,
               "cache_used_nbytes": 94076928
             },
             {
               "generated_tokens": 320,
-              "memory_allocated": 372712448,
+              "memory_allocated": 373549056,
               "memory_reserved": 503316480,
               "cache_nbytes": 103514112,
               "cache_used_nbytes": 103514112
             },
             {
               "generated_tokens": 352,
-              "memory_allocated": 382309376,
+              "memory_allocated": 383145984,
               "memory_reserved": 503316480,
               "cache_nbytes": 112951296,
               "cache_used_nbytes": 112951296
             },
             {
               "generated_tokens": 384,
-              "memory_allocated": 392541184,
+              "memory_allocated": 393377792,
               "memory_reserved": 503316480,
               "cache_nbytes": 122388480,
               "cache_used_nbytes": 122388480
             },
             {
               "generated_tokens": 416,
-              "memory_allocated": 401835008,
+              "memory_allocated": 402671616,
               "memory_reserved": 503316480,
               "cache_nbytes": 131825664,
               "cache_used_nbytes": 131825664
             },
             {
               "generated_tokens": 448,
-              "memory_allocated": 411427840,
+              "memory_allocated": 412264448,
               "memory_reserved": 503316480,
               "cache_nbytes": 141262848,
               "cache_used_nbytes": 141262848
             },
             {
               "generated_tokens": 480,
-              "memory_allocated": 420951040,
+              "memory_allocated": 421787648,
               "memory_reserved": 503316480,
               "cache_nbytes": 150700032,
               "cache_used_nbytes": 150700032
             },
             {
               "generated_tokens": 512,
-              "memory_allocated": 431244288,
+              "memory_allocated": 432080896,
               "memory_reserved": 545259520,
               "cache_nbytes": 160137216,
               "cache_used_nbytes": 160137216
             },
             {
               "generated_tokens": 544,
-              "memory_allocated": 438772736,
+              "memory_allocated": 439609344,
               "memory_reserved": 566231040,
               "cache_nbytes": 169574400,
               "cache_used_nbytes": 169574400
             },
             {
               "generated_tokens": 576,
-              "memory_allocated": 448209920,
+              "memory_allocated": 449046528,
               "memory_reserved": 566231040,
               "cache_nbytes": 179011584,
               "cache_used_nbytes": 179011584
             },
             {
               "generated_tokens": 608,
-              "memory_allocated": 458195968,
+              "memory_allocated": 459032576,
               "memory_reserved": 587202560,
               "cache_nbytes": 188448768,
               "cache_used_nbytes": 188448768
             },
             {
               "generated_tokens": 640,
-              "memory_allocated": 467084288,
+              "memory_allocated": 467920896,
               "memory_reserved": 587202560,
               "cache_nbytes": 197885952,
               "cache_used_nbytes": 197885952
             },
             {
               "generated_tokens": 672,
-              "memory_allocated": 476806656,
+              "memory_allocated": 477643264,
               "memory_reserved": 587202560,
               "cache_nbytes": 207323136,
               "cache_used_nbytes": 207323136
             },
             {
               "generated_tokens": 704,
-              "memory_allocated": 488403968,
+              "memory_allocated": 489240576,
               "memory_reserved": 587202560,
               "cache_nbytes": 216760320,
               "cache_used_nbytes": 216760320
             },
             {
               "generated_tokens": 736,
-              "memory_allocated": 496292864,
+              "memory_allocated": 497129472,
               "memory_reserved": 587202560,
               "cache_nbytes": 226197504,
               "cache_used_nbytes": 226197504
             },
             {
               "generated_tokens": 768,
-              "memory_allocated": 504857600,
+              "memory_allocated": 505694208,
               "memory_reserved": 650117120,
               "cache_nbytes": 235634688,
               "cache_used_nbytes": 235634688
             },
             {
               "generated_tokens": 800,
-              "memory_allocated": 518124544,
+              "memory_allocated": 518961152,
               "memory_reserved": 671088640,
               "cache_nbytes": 245071872,
               "cache_used_nbytes": 245071872
             },
             {
               "generated_tokens": 832,
-              "memory_allocated": 523707392,
+              "memory_allocated": 524544000,
               "memory_reserved": 734003200,
               "cache_nbytes": 254509056,
               "cache_used_nbytes": 254509056
             },
             {
               "generated_tokens": 864,
-              "memory_allocated": 533943296,
+              "memory_allocated": 534779904,
               "memory_reserved": 734003200,
               "cache_nbytes": 263946240,
               "cache_used_nbytes": 263946240
             },
             {
               "generated_tokens": 896,
-              "memory_allocated": 542987264,
+              "memory_allocated": 543823872,
               "memory_reserved": 746586112,
               "cache_nbytes": 273383424,
               "cache_used_nbytes": 273383424
             },
             {
               "generated_tokens": 928,
-              "memory_allocated": 556954624,
+              "memory_allocated": 557791232,
               "memory_reserved": 746586112,
               "cache_nbytes": 282820608,
               "cache_used_nbytes": 282820608
             },
             {
               "generated_tokens": 960,
-              "memory_allocated": 564425728,
+              "memory_allocated": 565262336,
               "memory_reserved": 759169024,
               "cache_nbytes": 292257792,
               "cache_used_nbytes": 292257792
             },
             {
               "generated_tokens": 992,
-              "memory_allocated": 571110400,
+              "memory_allocated": 571947008,
               "memory_reserved": 759169024,
               "cache_nbytes": 301694976,
               "cache_used_nbytes": 301694976
@@ -1728,237 +1730,413 @@
           "prompt_len": 32,
           "new_tokens": 992,
           "out_of_memory": false,
-          "max_memory_allocated": 597706240,
-          "max_memory_reserved": 775946240,
+          "max_memory_allocated": 598542848,
+          "max_memory_reserved": 778043392,
           "snapshots": [
             {
               "generated_tokens": 0,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 9437184
             },
             {
               "generated_tokens": 32,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 18579456
             },
             {
               "generated_tokens": 64,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 28016640
             },
             {
               "generated_tokens": 96,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 37453824
             },
             {
               "generated_tokens": 128,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 46891008
             },
             {
               "generated_tokens": 160,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 56328192
             },
             {
               "generated_tokens": 192,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 65765376
             },
             {
               "generated_tokens": 224,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 75202560
             },
             {
               "generated_tokens": 256,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 84639744
             },
             {
               "generated_tokens": 288,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 94076928
             },
             {
               "generated_tokens": 320,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 103514112
             },
             {
               "generated_tokens": 352,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 112951296
             },
             {
               "generated_tokens": 384,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 122388480
             },
             {
               "generated_tokens": 416,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 131825664
             },
             {
               "generated_tokens": 448,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 141262848
             },
             {
               "generated_tokens": 480,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 150700032
             },
             {
               "generated_tokens": 512,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 160137216
             },
             {
               "generated_tokens": 544,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 169574400
             },
             {
               "generated_tokens": 576,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 179011584
             },
             {
               "generated_tokens": 608,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 188448768
             },
             {
               "generated_tokens": 640,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 197885952
             },
             {
               "generated_tokens": 672,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 207323136
             },
             {
               "generated_tokens": 704,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 216760320
             },
             {
               "generated_tokens": 736,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 226197504
             },
             {
               "generated_tokens": 768,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 235634688
             },
             {
               "generated_tokens": 800,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 245071872
             },
             {
               "generated_tokens": 832,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 254509056
             },
             {
               "generated_tokens": 864,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 263946240
             },
             {
               "generated_tokens": 896,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 273383424
             },
             {
               "generated_tokens": 928,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 282820608
             },
             {
               "generated_tokens": 960,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 292257792
             },
             {
               "generated_tokens": 992,
-              "memory_allocated": 571188224,
-              "memory_reserved": 775946240,
+              "memory_allocated": 572024832,
+              "memory_reserved": 778043392,
               "cache_nbytes": 301989888,
               "cache_used_nbytes": 301694976
             }
           ]
         }
       ],
-      "duration_s": 44.79393180005718
+      "duration_s": 46.08094889996573
+    },
+    "overhead": {
+      "structural_config": {
+        "vocab_size": 256,
+        "n_positions": 1024,
+        "n_embd": 48,
+        "n_layer": 12,
+        "n_head": 12
+      },
+      "records": [
+        {
+          "model": "pretrained",
+          "variant": "dynamic",
+          "context_len": 512,
+          "steps": 16,
+          "total_median_s_per_token": 0.010079566955566405,
+          "total_p25_s_per_token": 0.009711065530776976,
+          "total_p75_s_per_token": 0.011518625736236573,
+          "host_median_s_per_token": 0.011917781249999999,
+          "host_p25_s_per_token": 0.0109544171875,
+          "host_p75_s_per_token": 0.01410993125,
+          "host_to_total_ratio": 1.1823703639786276,
+          "ops": {
+            "total": 354,
+            "view": 120,
+            "compute": 234,
+            "by_name": {
+              "aten.add": 25,
+              "aten.arange": 1,
+              "aten.bitwise_not": 12,
+              "aten.cat": 24,
+              "aten.div": 12,
+              "aten.embedding": 2,
+              "aten.gelu": 12,
+              "aten.layer_norm": 25,
+              "aten.linear": 49,
+              "aten.masked_fill": 12,
+              "aten.matmul": 24,
+              "aten.ones": 12,
+              "aten.softmax": 12,
+              "aten.split": 12,
+              "aten.transpose": 60,
+              "aten.tril": 12,
+              "aten.view": 48
+            },
+            "launch_limited_s": 0.0
+          },
+          "structural_cost_per_op_s": 2.8143463835204388e-05,
+          "gpu_work_delta_vs_structural_s_per_token": 0.00011678075790405237
+        },
+        {
+          "model": "pretrained",
+          "variant": "static",
+          "context_len": 512,
+          "steps": 16,
+          "total_median_s_per_token": 0.009711148262023926,
+          "total_p25_s_per_token": 0.009646414279937744,
+          "total_p75_s_per_token": 0.01014597797393799,
+          "host_median_s_per_token": 0.011011996874999999,
+          "host_p25_s_per_token": 0.010735893750000001,
+          "host_p75_s_per_token": 0.012147295312499999,
+          "host_to_total_ratio": 1.1339541502072545,
+          "ops": {
+            "total": 462,
+            "view": 228,
+            "compute": 234,
+            "by_name": {
+              "aten.add": 25,
+              "aten.arange": 1,
+              "aten.bitwise_not": 12,
+              "aten.copy_": 24,
+              "aten.div": 12,
+              "aten.embedding": 2,
+              "aten.gelu": 12,
+              "aten.layer_norm": 25,
+              "aten.linear": 49,
+              "aten.masked_fill": 12,
+              "aten.matmul": 24,
+              "aten.ones": 12,
+              "aten.select": 60,
+              "aten.slice": 48,
+              "aten.softmax": 12,
+              "aten.split": 12,
+              "aten.transpose": 60,
+              "aten.tril": 12,
+              "aten.view": 48
+            },
+            "launch_limited_s": 0.0
+          },
+          "structural_cost_per_op_s": 2.1811406849782703e-05,
+          "gpu_work_delta_vs_structural_s_per_token": -0.0003657217025756828
+        },
+        {
+          "model": "structural",
+          "variant": "dynamic",
+          "context_len": 512,
+          "steps": 16,
+          "total_median_s_per_token": 0.009962786197662353,
+          "total_p25_s_per_token": 0.009315700531005859,
+          "total_p75_s_per_token": 0.011286402225494386,
+          "host_median_s_per_token": 0.011925109375,
+          "host_p25_s_per_token": 0.010455865625000001,
+          "host_p75_s_per_token": 0.0157198765625,
+          "host_to_total_ratio": 1.1969653005098193,
+          "ops": {
+            "total": 354,
+            "view": 120,
+            "compute": 234,
+            "by_name": {
+              "aten.add": 25,
+              "aten.arange": 1,
+              "aten.bitwise_not": 12,
+              "aten.cat": 24,
+              "aten.div": 12,
+              "aten.embedding": 2,
+              "aten.gelu": 12,
+              "aten.layer_norm": 25,
+              "aten.linear": 49,
+              "aten.masked_fill": 12,
+              "aten.matmul": 24,
+              "aten.ones": 12,
+              "aten.softmax": 12,
+              "aten.split": 12,
+              "aten.transpose": 60,
+              "aten.tril": 12,
+              "aten.view": 48
+            },
+            "launch_limited_s": 0.0
+          },
+          "structural_cost_per_op_s": 2.8143463835204388e-05,
+          "gpu_work_delta_vs_structural_s_per_token": 0.0
+        },
+        {
+          "model": "structural",
+          "variant": "static",
+          "context_len": 512,
+          "steps": 16,
+          "total_median_s_per_token": 0.010076869964599609,
+          "total_p25_s_per_token": 0.009812873601913451,
+          "total_p75_s_per_token": 0.01090911054611206,
+          "host_median_s_per_token": 0.012999478125,
+          "host_p25_s_per_token": 0.011741659375000001,
+          "host_p75_s_per_token": 0.0158899609375,
+          "host_to_total_ratio": 1.2900313461092199,
+          "ops": {
+            "total": 462,
+            "view": 228,
+            "compute": 234,
+            "by_name": {
+              "aten.add": 25,
+              "aten.arange": 1,
+              "aten.bitwise_not": 12,
+              "aten.copy_": 24,
+              "aten.div": 12,
+              "aten.embedding": 2,
+              "aten.gelu": 12,
+              "aten.layer_norm": 25,
+              "aten.linear": 49,
+              "aten.masked_fill": 12,
+              "aten.matmul": 24,
+              "aten.ones": 12,
+              "aten.select": 60,
+              "aten.slice": 48,
+              "aten.softmax": 12,
+              "aten.split": 12,
+              "aten.transpose": 60,
+              "aten.tril": 12,
+              "aten.view": 48
+            },
+            "launch_limited_s": 0.0
+          },
+          "structural_cost_per_op_s": 2.1811406849782703e-05,
+          "gpu_work_delta_vs_structural_s_per_token": 0.0
+        }
+      ],
+      "duration_s": 20.731351800030097
     }
   }
 }
