@@ -24,7 +24,7 @@ from benchmarks.costs import (
     weight_bytes,
 )
 from benchmarks.gpu import heat_up, nvidia_smi_snapshot
-from benchmarks.machine import machine_info, set_benchmark_numerics
+from benchmarks.machine import machine_info, require_clean_tree, set_benchmark_numerics
 from benchmarks.opcount import count_ops
 from benchmarks.timing import Measurement, time_interleaved_staged
 from kvcache import GPT, load_pretrained_gpt2
@@ -593,6 +593,7 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=10)
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--steps", type=int)
+    parser.add_argument("--allow-dirty", action="store_true")
     args = parser.parse_args()
     try:
         validate_benchmark_request(args.suite, args.device, args.dtype)
@@ -601,6 +602,7 @@ def main() -> None:
     if args.device == "cuda" and not torch.cuda.is_available():
         parser.error("CUDA was requested but torch.cuda.is_available() is false")
 
+    require_clean_tree(args.allow_dirty)
     set_benchmark_numerics()
     dtype = _dtype(args.dtype)
     device = torch.device(args.device)
@@ -634,6 +636,7 @@ def main() -> None:
             "repeats": args.repeats,
             "steps": steps,
             "seed": SEED,
+            "allow_dirty": args.allow_dirty,
         },
         "calibration": {
             "path": str(CALIBRATION_PATH.relative_to(ROOT)).replace("\\", "/"),

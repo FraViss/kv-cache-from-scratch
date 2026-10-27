@@ -66,16 +66,49 @@ def nvidia_smi_query() -> dict[str, str | int | float | None] | None:
     return parsed
 
 
-def _git_state() -> tuple[str | None, bool]:
+def _git_porcelain(*, outside_results: bool = False) -> str:
+    command = ["git", "status", "--porcelain", "--untracked-files=all"]
+    if outside_results:
+        command.extend(
+            [
+                "--",
+                ".",
+                ":(exclude)benchmarks/results",
+                ":(exclude)benchmarks/results/**",
+            ]
+        )
+    status = subprocess.run(command, capture_output=True, text=True, check=False)
+    return status.stdout if status.returncode == 0 else ""
+
+
+def require_clean_tree(allow_dirty: bool = False) -> None:
+    """Refuse benchmarks when code or documentation has uncommitted changes.
+
+    Changes below ``benchmarks/results/`` are allowed because sequential runs
+    replace several committed JSON files before one result commit. Everything
+    else must be committed, unless ``allow_dirty`` is explicitly true.
+    """
+    if allow_dirty:
+        return
+    dirty = _git_porcelain(outside_results=True).strip()
+    if dirty:
+        raise RuntimeError(
+            "benchmark code must be committed before measuring; uncommitted "
+            f"changes outside benchmarks/results/:\n{dirty}\n"
+            "Commit or restore them, or pass --allow-dirty explicitly."
+        )
+
+
+def _git_state() -> tuple[str | None, bool, bool]:
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=False
     )
-    status = subprocess.run(
-        ["git", "status", "--porcelain"], capture_output=True, text=True, check=False
-    )
     sha = commit.stdout.strip() if commit.returncode == 0 else None
-    dirty = bool(status.stdout.strip()) if status.returncode == 0 else False
-    return sha, dirty
+    return (
+        sha,
+        bool(_git_porcelain().strip()),
+        bool(_git_porcelain(outside_results=True).strip()),
+    )
 
 
 def _gpu_info() -> dict[str, str | int | list[int]] | None:
@@ -96,7 +129,7 @@ def machine_info() -> dict[str, object]:
     ``git status --porcelain`` is non-empty. GPU fields are None when CUDA is
     unavailable or nvidia-smi cannot be queried.
     """
-    commit, dirty = _git_state()
+    commit, dirty, dirty_outside_results = _git_state()
     return {
         "timestamp": datetime.now().astimezone().isoformat(),
         "os": platform.platform(),
@@ -112,4 +145,5 @@ def machine_info() -> dict[str, object]:
         "allow_tf32_cudnn": torch.backends.cudnn.allow_tf32,
         "git_commit": commit,
         "dirty": dirty,
+        "dirty_outside_results": dirty_outside_results,
     }

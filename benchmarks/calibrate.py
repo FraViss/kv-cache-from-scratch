@@ -16,7 +16,12 @@ from typing import Callable
 
 import torch
 
-from benchmarks.machine import machine_info, nvidia_smi_query, set_benchmark_numerics
+from benchmarks.machine import (
+    machine_info,
+    nvidia_smi_query,
+    require_clean_tree,
+    set_benchmark_numerics,
+)
 from benchmarks.timing import Measurement, time_fn
 
 _GIB = 1 << 30
@@ -118,12 +123,14 @@ def calibrate(
     copy_bytes: int = _GIB,
     matmul_n: int = 4096,
     launch_calls: int = 1000,
+    allow_dirty: bool = False,
 ) -> dict[str, object]:
     """Calibrate each device and write the JSON record to ``out``.
 
     ``copy_bytes``, ``matmul_n`` and ``launch_calls`` default to the full
     benchmark sizes. Tests pass smaller ones.
     """
+    require_clean_tree(allow_dirty)
     set_benchmark_numerics()
     if isinstance(devices, str):
         selected = _devices(devices)
@@ -147,6 +154,7 @@ def calibrate(
             "copy_bytes": copy_bytes,
             "matmul_n": matmul_n,
             "launch_calls": launch_calls,
+            "allow_dirty": allow_dirty,
             "copy_dtype": "float32",
             "read_op": "sum",
             "matmul_flop": "2 * n**3",
@@ -208,11 +216,22 @@ def _print_table(payload: dict[str, object]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", choices=("cpu", "cuda", "all"), required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("benchmarks/results/calibration.json"),
+    )
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--repeats", type=int, default=20)
+    parser.add_argument("--allow-dirty", action="store_true")
     args = parser.parse_args()
-    calibrate(args.device, args.out, warmup=args.warmup, repeats=args.repeats)
+    calibrate(
+        args.device,
+        args.out,
+        warmup=args.warmup,
+        repeats=args.repeats,
+        allow_dirty=args.allow_dirty,
+    )
 
 
 if __name__ == "__main__":
