@@ -1,9 +1,11 @@
 import json
 import time
+import weakref
 
 import pytest
 import torch
 
+import benchmarks.machine as machine_module
 from benchmarks.calibrate import calibrate
 from benchmarks.costs import (
     decode_step_bytes,
@@ -15,10 +17,11 @@ from benchmarks.costs import (
     roofline_time_s,
     weight_bytes,
 )
-from benchmarks.machine import machine_info
+from benchmarks.machine import machine_info, require_clean_tree
 from benchmarks.opcount import count_ops
 from benchmarks.run import (
     run_decode_suite,
+    run_overhead_suite,
     run_prefill_suite,
     validate_benchmark_request,
 )
@@ -115,6 +118,28 @@ def test_time_interleaved_staged_excludes_setup_and_is_round_robin() -> None:
     ] * 3
 
 
+def test_time_interleaved_staged_releases_state_before_next_setup() -> None:
+    previous: list[weakref.ReferenceType[object]] = []
+
+    class State:
+        pass
+
+    def setup() -> State:
+        assert all(reference() is None for reference in previous)
+        state = State()
+        previous.append(weakref.ref(state))
+        return state
+
+    measurements = time_interleaved_staged(
+        {"tracked": (setup, lambda state: None)},
+        "cpu",
+        warmup=1,
+        repeats=2,
+    )
+    assert len(measurements["tracked"].samples_s) == 2
+    assert all(reference() is None for reference in previous)
+
+
 def test_count_ops_partitions_model_forward_and_counts_linears() -> None:
     config = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
     model = GPT(config).eval()
@@ -139,6 +164,27 @@ def test_machine_info_is_json_and_records_numerics() -> None:
     assert "float32_matmul_precision" in info
     assert "allow_tf32_matmul" in info
     assert "allow_tf32_cudnn" in info
+    assert "dirty_outside_results" in info
+
+
+def test_require_clean_tree_ignores_results_but_rejects_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        machine_module,
+        "_git_porcelain",
+        lambda *, outside_results=False: "" if outside_results else " M benchmarks/results/x.json",
+    )
+    require_clean_tree(False)
+
+    monkeypatch.setattr(
+        machine_module,
+        "_git_porcelain",
+        lambda *, outside_results=False: " M benchmarks/run.py",
+    )
+    with pytest.raises(RuntimeError, match="benchmarks/run.py"):
+        require_clean_tree(False)
+    require_clean_tree(True)
 
 
 def test_calibrate_cpu_writes_the_expected_keys(tmp_path) -> None:
@@ -151,10 +197,12 @@ def test_calibrate_cpu_writes_the_expected_keys(tmp_path) -> None:
         copy_bytes=1 << 20,
         matmul_n=64,
         launch_calls=4,
+        allow_dirty=True,
     )
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert set(payload) >= {"machine", "machine_after", "settings", "results"}
     assert payload["settings"]["copy_bytes"] == 1 << 20
+    assert payload["settings"]["allow_dirty"] is True
     cpu = payload["results"]["cpu"]
     for name in ("copy_bandwidth_GBs", "read_bandwidth_GBs", "matmul_f32_TFLOPs"):
         assert set(cpu[name]) == {"median", "p25", "p75"}
@@ -222,6 +270,41 @@ def test_prefill_suite_runs_on_small_cpu_model() -> None:
         }
 
 
+def test_overhead_suite_runs_on_small_cpu_models() -> None:
+    pretrained = _small_benchmark_model()
+    structural = _small_benchmark_model()
+    result = run_overhead_suite(
+        pretrained,
+        structural,
+        "cpu",
+        torch.float64,
+        context=4,
+        steps=2,
+        warmup=0,
+        repeats=2,
+    )
+    assert set(result) == {"structural_config", "records"}
+    assert len(result["records"]) == 4
+    for record in result["records"]:
+        assert set(record) >= {
+            "model",
+            "variant",
+            "total_median_s_per_token",
+            "host_median_s_per_token",
+            "host_to_total_ratio",
+            "ops",
+            "structural_cost_per_op_s",
+            "gpu_work_delta_vs_structural_s_per_token",
+        }
+        assert record["ops"]["total"] > 0
+        assert record["ops"]["view"] + record["ops"]["compute"] == record["ops"]["total"]
+
+
 def test_cpu_bfloat16_request_is_rejected() -> None:
     with pytest.raises(ValueError, match="ADR-0009"):
         validate_benchmark_request("decode", "cpu", "bfloat16")
+
+
+def test_cpu_overhead_request_is_rejected() -> None:
+    with pytest.raises(ValueError, match="requires CUDA"):
+        validate_benchmark_request("overhead", "cpu", "float32")
