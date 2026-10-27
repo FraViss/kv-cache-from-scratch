@@ -16,7 +16,13 @@ from benchmarks.costs import (
     weight_bytes,
 )
 from benchmarks.machine import machine_info
-from benchmarks.timing import time_fn, time_interleaved
+from benchmarks.opcount import count_ops
+from benchmarks.run import (
+    run_decode_suite,
+    run_prefill_suite,
+    validate_benchmark_request,
+)
+from benchmarks.timing import time_fn, time_interleaved, time_interleaved_staged
 from kvcache import GPT, GPT2Config
 
 CONFIG = GPT2Config()
@@ -76,6 +82,49 @@ def test_time_interleaved_is_round_robin_after_warmup() -> None:
     assert order[6:] == ["A", "B", "C", "A", "B", "C", "A", "B", "C"]
 
 
+def test_time_interleaved_staged_excludes_setup_and_is_round_robin() -> None:
+    order: list[str] = []
+    setup_calls = {"A": 0, "B": 0}
+    run_calls = {"A": 0, "B": 0}
+
+    def case(name: str):
+        def setup() -> str:
+            order.append(f"setup-{name}")
+            setup_calls[name] += 1
+            time.sleep(0.05)
+            return name
+
+        def run(state: str) -> None:
+            assert state == name
+            order.append(f"run-{name}")
+            run_calls[name] += 1
+            time.sleep(0.005)
+
+        return setup, run
+
+    measurements = time_interleaved_staged(
+        {"A": case("A"), "B": case("B")}, "cpu", warmup=1, repeats=2
+    )
+    assert setup_calls == run_calls == {"A": 3, "B": 3}
+    assert all(measurement.median_s < 0.03 for measurement in measurements.values())
+    assert order == [
+        "setup-A",
+        "run-A",
+        "setup-B",
+        "run-B",
+    ] * 3
+
+
+def test_count_ops_partitions_model_forward_and_counts_linears() -> None:
+    config = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
+    model = GPT(config).eval()
+    input_ids = torch.randint(0, config.vocab_size, (1, 8))
+    counts = count_ops(lambda: model(input_ids))
+    assert counts["total"] > 0
+    assert counts["view"] + counts["compute"] == counts["total"]
+    assert counts["by_name"]["aten.addmm"] == 4 * config.n_layer
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
 def test_time_fn_on_cuda_returns_positive_samples() -> None:
     left = torch.randn(1024, 1024, device="cuda")
@@ -112,3 +161,67 @@ def test_calibrate_cpu_writes_the_expected_keys(tmp_path) -> None:
     assert cpu["ridge_point_flop_per_byte"] > 0
     assert "matmul_bf16_TFLOPs" not in cpu
     assert "launch_overhead_us" not in cpu
+
+
+def _small_benchmark_model() -> GPT:
+    torch.manual_seed(0)
+    config = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
+    return GPT(config).to(torch.float64).eval()
+
+
+def _small_calibration() -> dict[str, float]:
+    return {
+        "read_bandwidth_GBs": 10.0,
+        "peak_TFLOPs": 1.0,
+        "launch_overhead_us": 1.0,
+    }
+
+
+def test_decode_suite_runs_on_small_cpu_model() -> None:
+    result = run_decode_suite(
+        _small_benchmark_model(),
+        "cpu",
+        torch.float64,
+        _small_calibration(),
+        contexts=(4,),
+        steps=2,
+        warmup=0,
+        repeats=2,
+        op_context=8,
+    )
+    assert set(result) == {"op_context", "opcounts", "records"}
+    assert len(result["records"]) == 3
+    assert all(record["sequences_match"] is True for record in result["records"])
+    for record in result["records"]:
+        assert set(record) >= {
+            "variant",
+            "median_s",
+            "roofline_per_token_s",
+            "generated_tokens",
+        }
+
+
+def test_prefill_suite_runs_on_small_cpu_model() -> None:
+    result = run_prefill_suite(
+        _small_benchmark_model(),
+        "cpu",
+        torch.float64,
+        _small_calibration(),
+        lengths=(4,),
+        warmup=0,
+        repeats=2,
+    )
+    assert len(result["records"]) == 2
+    for record in result["records"]:
+        assert set(record) >= {
+            "variant",
+            "median_s",
+            "achieved_TFLOPs",
+            "peak_fraction",
+            "roofline_s",
+        }
+
+
+def test_cpu_bfloat16_request_is_rejected() -> None:
+    with pytest.raises(ValueError, match="ADR-0009"):
+        validate_benchmark_request("decode", "cpu", "bfloat16")
