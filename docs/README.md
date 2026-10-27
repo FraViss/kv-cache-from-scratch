@@ -35,3 +35,5 @@ Files in `docs/decisions/` use four-digit numbering (`0001`, `0002`, and so on).
 - No agent-specific instruction files
 - Commits are attributed only to the author
 - Agents stop at commits and never push: the author pushes after reviewing
+- Agents never rewrite existing commits: no rebase, amend, squash or autosquash. A correction is a new commit.
+- Benchmarks run only from committed code. Every result JSON records the commit that measured its numbers.
