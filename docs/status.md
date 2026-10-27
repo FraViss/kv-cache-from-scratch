@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 
-State: M4 in progress. Part 1 is done: the timing harness (CUDA events, interleaved runs), the machine record, the analytic FLOP and byte model, and a calibration of bandwidth, compute and launch overhead on this machine (`benchmarks/results/calibration.json`). No generation benchmark yet.
+State: M4 in progress. Parts 1 and 2 are done. Part 1 added the timing harness (CUDA events, interleaved runs), machine record, analytic FLOP and byte model, and machine calibration. Part 2 measured decode, batch scaling, prefill and memory for the uncached baseline, `DynamicKVCache` and `StaticKVCache`, in float32 and bfloat16 on CUDA and in float32 on CPU. The committed JSON records include roofline predictions, aten operation counts, sequence comparisons, allocator measurements and GPU snapshots.
 
 M3, for reference: `StaticKVCache` (ADR-0008) preallocates its buffers once and writes new keys and values in place. It implements the same `KVCache` interface as `DynamicKVCache`. Preview on the 1000-token prompt plus 24 steps, CPU, float64: about 2.3 s with the static cache against 2.7 s with the dynamic one.
 
@@ -17,12 +17,12 @@ M1, for reference: the GPT-2 small model, the strict safetensors loader (checkpo
 | M1 | GPT-2 decoder from scratch, weight loader, greedy generation without a cache, logits checked against Hugging Face | done |
 | M2 | Dynamic cache (concatenation) with logit-equivalence tests against the uncached path | done |
 | M3 | Static preallocated cache with a write index | done |
-| M4 | Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model | in progress (part 1 done: harness, cost model, calibration) |
+| M4 | Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model | in progress (parts 1–2 done: harness, calibration and raw measurement series) |
 | — | Memory and serving (block allocator in the style of PagedAttention, batching with mixed lengths) | deferred, see ADR-0002 |
 
 ## Next step
 
-M4 part 2: generation benchmarks. Tokens/s and memory against length, for the uncached baseline and both caches, on CPU and GPU, compared with the cost model.
+M4 part 3: plots, analysis in the README, and a demonstration notebook.
 
 ## How to get back up to speed
 
