@@ -10,10 +10,12 @@ import statistics
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeVar
 
 import torch
 
 _QUARTILE_METHOD = "exclusive"
+S = TypeVar("S")
 
 
 @dataclass(frozen=True)
@@ -119,4 +121,44 @@ def time_interleaved(
     for _ in range(repeats):
         for name in names:
             samples[name].append(_elapsed_s(fns[name], device))
+    return {name: Measurement(tuple(samples[name])) for name in names}
+
+
+def time_interleaved_staged(
+    cases: dict[str, tuple[Callable[[], S], Callable[[S], object]]],
+    device: str | torch.device,
+    warmup: int = 3,
+    repeats: int = 10,
+) -> dict[str, Measurement]:
+    """Time staged cases round-robin while excluding setup from every sample.
+
+    A case is ``(setup, run)``. For every warmup and measured invocation,
+    ``setup()`` creates fresh state outside the timed region. CUDA is synchronized
+    after setup so queued setup work cannot leak into the interval, then only
+    ``run(state)`` is measured by the same ``_elapsed_s`` used by ``time_fn`` and
+    ``time_interleaved``.
+
+    Cases run round-robin in dict order for both warmup and measurement:
+    A, B, C, A, B, C, ... . This keeps stateful benchmarks independent while
+    spreading thermal drift across variants.
+    """
+    names = tuple(cases)
+    samples: dict[str, list[float]] = {name: [] for name in names}
+
+    def invoke(name: str, *, measured: bool) -> None:
+        setup, run = cases[name]
+        state = setup()
+        if _on_cuda(device):
+            torch.cuda.synchronize()
+        if measured:
+            samples[name].append(_elapsed_s(lambda: run(state), device))
+        else:
+            run(state)
+
+    for _ in range(warmup):
+        for name in names:
+            invoke(name, measured=False)
+    for _ in range(repeats):
+        for name in names:
+            invoke(name, measured=True)
     return {name: Measurement(tuple(samples[name])) for name in names}
