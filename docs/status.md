@@ -2,7 +2,11 @@
 
 Date: 2026-10-28
 
-State: M5 in progress; parts 1 and 2 are done. Part 2 added `CapturableKVCache`, which writes at device-side positions and returns its whole buffer, and `CUDAGraphDecoder` with `generate_greedy_graph`: an eager prefill, then a self-feeding decode step captured once and replayed (ADR-0012). The capturable cache passes the full equivalence suite in eager mode, and graph decoding matches the uncached baseline on CUDA and Hugging Face in the integration tests. A one-off preview (pretrained, float32, batch 1, 512-token prompt, 65 new tokens) gave 2.11 ms per token with the graph against 9.95 ms in eager mode with the static cache. That is not yet a measurement.
+State: M5 parts 1 to 3 are done. Part 3 added a `graph` variant (a decode step captured in a CUDA graph with `CapturableKVCache`) to the decode, batch and overhead suites, and a new capacity suite that times graph decode at batch size 8 for capacities of 128, 256, 512 and 1024 tokens. The cost model now counts a full-buffer read for the capturable cache (`decode_step_bytes(..., "capturable", capacity=...)`), and the graph's FLOPs use the capacity as the attention length. Decode records for the graph also carry a "graph floor + bandwidth" prediction: the per-token time of the structural model in the graph, from the overhead suite of the same run, plus the step bytes over the measured read bandwidth. With `--suite all` the overhead suite therefore runs first.
+
+Every variant now runs the same number of decode steps (`steps`) after an untimed prefill, and timings are divided by `steps`. Earlier results timed `steps - 1` cached steps, and the uncached variant included its first full forward in the timed region. Every result in `benchmarks/results/` was then re-measured from one clean commit, which each JSON records as `machine.git_commit`, so M4 and M5 describe the same code.
+
+M5 part 2, for reference: part 2 added `CapturableKVCache`, which writes at device-side positions and returns its whole buffer, and `CUDAGraphDecoder` with `generate_greedy_graph`: an eager prefill, then a self-feeding decode step captured once and replayed (ADR-0012). The capturable cache passes the full equivalence suite in eager mode, and graph decoding matches the uncached baseline on CUDA and Hugging Face in the integration tests. A one-off preview (pretrained, float32, batch 1, 512-token prompt, 65 new tokens) gave 2.11 ms per token with the graph against 9.95 ms in eager mode with the static cache. That is not yet a measurement.
 
 M5 part 1, for reference: The M4 overhead suite showed that decode at batch size 1 on the GPU sits on a floor of about 10 ms per token set by host-side overhead, since a model of the same structure but tiny dimensions takes as long. M5 captures the decode step in a CUDA graph (ADR-0010). Part 1 checked that capture and replay work on this machine (`tests/test_cuda_graphs.py`). It also rebuilt the attention mask from absolute query positions (ADR-0011), so attention can later read the whole static buffer. No result changed.
 
@@ -22,12 +26,12 @@ M1, for reference: the GPT-2 small model, the strict safetensors loader (checkpo
 | M2 | Dynamic cache (concatenation) with logit-equivalence tests against the uncached path | done |
 | M3 | Static preallocated cache with a write index | done |
 | M4 | Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model | in progress (parts 1–2 done: harness, calibration and raw measurement series; part 3, the write-up, waits for M5) |
-| M5 | Decode captured in a CUDA graph with the static cache (ADR-0010) | in progress (parts 1–2 done: capture feasibility, position-based mask, capturable cache and graph decoder) |
+| M5 | Decode captured in a CUDA graph with the static cache (ADR-0010) | in progress (parts 1–3 done: capture feasibility, position-based mask, capturable cache and graph decoder, graph benchmarks and a full re-measurement) |
 | — | Memory and serving (block allocator in the style of PagedAttention, batching with mixed lengths) | deferred, see ADR-0002 |
 
 ## Next step
 
-M5 part 3: benchmark graph decoding, and re-measure every suite from the same commit, so all M4 and M5 results describe one code base. Then M4 part 3, the write-up of M4 and M5: plots, analysis in the README, and a demonstration notebook.
+M4 part 3, the write-up of M4 and M5 from the re-measured results: plots, analysis in the README, and a demonstration notebook.
 
 ## How to get back up to speed
 
