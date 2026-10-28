@@ -2,28 +2,7 @@
 
 Date: 2026-10-28
 
-State: M5 parts 1 to 3 are done, and two diagnostic suites are added. In the re-measured results, graph decode at batch size 1 (float32 2.54 ms, bfloat16 1.69 ms per token) is roughly the structural graph floor (0.41 ms), plus a constant residual of about 0.45 ms, plus bytes over bandwidth. Two anomalies remain: the graph is faster at T=1000 (2.19 ms), and an earlier graph-only preview gave 2.11 ms. The hypotheses to separate are (H1) eager variants interleaved with the graph leave the GPU nearly idle, so its clock drops and the graph suffers, and (H2) the residual is the latency of medium-sized kernels (the projection matmuls) that do not reach peak bandwidth. In float32 at batch size 32 the graph also measures 8.6 ms against about 5.9 ms predicted, while bfloat16 matches its prediction.
-
-- `--suite graph_isolation` (CUDA only, not part of `all`) captures each (model, T) once and times only `replay(16)`, with `prepare` restoring the state before every repetition. It runs four modes, each after a heat-up and between nvidia-smi snapshots: T ascending, T descending, a 0.2 s idle before each repetition, and 16 untimed eager decode steps before each repetition.
-- `--suite shapes` (CUDA only, not part of `all`) times the decode linears at their real and structural shapes for B in {1, 8, 32}, 20 calls per CUDA graph. It also records a read-bandwidth curve from `x.sum()` over 1 to 1024 MiB. Twenty calls reuse one weight, so weights that fit in the L2 cache can show more than the DRAM bandwidth. Read the small shapes with that in mind.
-
-Results go to `benchmarks/results/graph_isolation_cuda_<dtype>.json` and `shapes_cuda_<dtype>.json`. The suites and results of part 3 are unchanged.
-
-M5 part 3, for reference: part 3 added a `graph` variant (a decode step captured in a CUDA graph with `CapturableKVCache`) to the decode, batch and overhead suites, and a new capacity suite that times graph decode at batch size 8 for capacities of 128, 256, 512 and 1024 tokens. The cost model now counts a full-buffer read for the capturable cache (`decode_step_bytes(..., "capturable", capacity=...)`), and the graph's FLOPs use the capacity as the attention length. Decode records for the graph also carry a "graph floor + bandwidth" prediction: the per-token time of the structural model in the graph, from the overhead suite of the same run, plus the step bytes over the measured read bandwidth. With `--suite all` the overhead suite therefore runs first.
-
-Every variant now runs the same number of decode steps (`steps`) after an untimed prefill, and timings are divided by `steps`. Earlier results timed `steps - 1` cached steps, and the uncached variant included its first full forward in the timed region. Every result in `benchmarks/results/` was then re-measured from one clean commit, which each JSON records as `machine.git_commit`, so M4 and M5 describe the same code.
-
-M5 part 2, for reference: part 2 added `CapturableKVCache`, which writes at device-side positions and returns its whole buffer, and `CUDAGraphDecoder` with `generate_greedy_graph`: an eager prefill, then a self-feeding decode step captured once and replayed (ADR-0012). The capturable cache passes the full equivalence suite in eager mode, and graph decoding matches the uncached baseline on CUDA and Hugging Face in the integration tests. A one-off preview (pretrained, float32, batch 1, 512-token prompt, 65 new tokens) gave 2.11 ms per token with the graph against 9.95 ms in eager mode with the static cache. That is not yet a measurement.
-
-M5 part 1, for reference: The M4 overhead suite showed that decode at batch size 1 on the GPU sits on a floor of about 10 ms per token set by host-side overhead, since a model of the same structure but tiny dimensions takes as long. M5 captures the decode step in a CUDA graph (ADR-0010). Part 1 checked that capture and replay work on this machine (`tests/test_cuda_graphs.py`). It also rebuilt the attention mask from absolute query positions (ADR-0011), so attention can later read the whole static buffer. No result changed.
-
-M4, for reference: parts 1 and 2 are done; part 3 is now the write-up of M4 and M5 together. Part 1 added the timing harness (CUDA events, interleaved runs), machine record, analytic FLOP and byte model, and machine calibration. Part 2 measured decode, batch scaling, prefill and memory for the uncached baseline, `DynamicKVCache` and `StaticKVCache`, in float32 and bfloat16 on CUDA and in float32 on CPU. The committed JSON records include roofline predictions, aten operation counts, sequence comparisons, allocator measurements and GPU snapshots.
-
-M3, for reference: `StaticKVCache` (ADR-0008) preallocates its buffers once and writes new keys and values in place. It implements the same `KVCache` interface as `DynamicKVCache`. Preview on the 1000-token prompt plus 24 steps, CPU, float64: about 2.3 s with the static cache against 2.7 s with the dynamic one.
-
-M2, for reference: the model takes an optional `KVCache` (ADR-0007), and `DynamicKVCache` grows it by concatenation. With the pretrained model in float64, on a 1000-token prompt plus 24 decode steps, cached and uncached logits differ by at most 8.3e-13. On that case, on CPU in float64, cached generation takes about 2.5 s against 38.5 s without a cache.
-
-M1, for reference: the GPT-2 small model, the strict safetensors loader (checkpoint pinned to `607a30d783dfa663caf39e06633721c8d4cfcd7e`) and the uncached greedy baseline match Hugging Face within 1.6e-13 in float64.
+State: the project is complete. M1–M5 are done. The README presents the results and the lessons, [results.md](results.md) holds every table, generated from the committed JSON in `benchmarks/results/`, and [figures/](figures/) holds the figures drawn from the same files. `notebooks/demo.ipynb` is an executed demonstration.
 
 ## Milestones
 
@@ -32,16 +11,28 @@ M1, for reference: the GPT-2 small model, the strict safetensors loader (checkpo
 | M1 | GPT-2 decoder from scratch, weight loader, greedy generation without a cache, logits checked against Hugging Face | done |
 | M2 | Dynamic cache (concatenation) with logit-equivalence tests against the uncached path | done |
 | M3 | Static preallocated cache with a write index | done |
-| M4 | Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model | in progress (parts 1–2 done: harness, calibration and raw measurement series; part 3, the write-up, waits for M5) |
-| M5 | Decode captured in a CUDA graph with the static cache (ADR-0010) | in progress (parts 1–3 done: capture feasibility, position-based mask, capturable cache and graph decoder, graph benchmarks and a full re-measurement) |
+| M4 | Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model | done |
+| M5 | Decode captured in a CUDA graph with the static cache (ADR-0010) | done |
 | — | Memory and serving (block allocator in the style of PagedAttention, batching with mixed lengths) | deferred, see ADR-0002 |
 
-## Next step
+## Summary by milestone
 
-M4 part 3, the write-up of M4 and M5 from the re-measured results: plots, analysis in the README, and a demonstration notebook.
+- **M1.** GPT-2 small from scratch, with a strict safetensors loader (checkpoint pinned to `607a30d783dfa663caf39e06633721c8d4cfcd7e`) and an uncached greedy baseline. All three match Hugging Face within 1.6e-13 in float64 (ADR-0001, 0003, 0004, 0005, 0006).
+- **M2.** A mutable `KVCache` interface and `DynamicKVCache`. Cached and uncached logits agree within 8.3e-13 on a 1000-token prompt (ADR-0007).
+- **M3.** `StaticKVCache`: preallocated, written in place, same interface (ADR-0008).
+- **M4.** Calibration, cost model, timing harness and suites for decode, batch, prefill, memory and overhead (ADR-0009). Eager decode on the GPU turned out to be bound by host-side overhead.
+- **M5.** Attention mask built from positions, `CapturableKVCache`, and a CUDA graph decoder with graph variants in the benchmarks (ADR-0010, 0011, 0012). Diagnostic suites (`graph_isolation` with a GPU clock log, `shapes`) documented the variability between runs and the limits of the calibration (ADR-0013).
+
+All results were re-measured from clean commits; each JSON records its commit. The float32 graph runs at two levels whose cause was not identified (ADR-0013), so float32 graph times are reported as a range.
+
+## Possible next steps (not planned)
+
+- The deferred serving block: a block allocator in the style of PagedAttention, and batching with mixed lengths (ADR-0002).
+- A Llama-style extension: RoPE, GQA, RMSNorm (ADR-0001).
+- Quantisation of the cache (int8 or fp8 keys and values), measured with the same suites.
 
 ## How to get back up to speed
 
 1. Read `docs/README.md`.
 2. Read the decision records in order.
-3. Read this file.
+3. Read this file, then `README.md` and `docs/results.md`.
