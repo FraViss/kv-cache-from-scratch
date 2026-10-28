@@ -267,6 +267,18 @@ class StaticKVCache(KVCache):
         return self._keys.shape[3]
 
     @property
+    def batch_size(self) -> int:
+        return self._keys.shape[1]
+
+    @property
+    def dtype(self) -> torch.dtype:
+        return self._keys.dtype
+
+    @property
+    def device(self) -> torch.device:
+        return self._keys.device
+
+    @property
     def nbytes(self) -> int:
         return 2 * self._keys.numel() * self._keys.element_size()
 
@@ -300,6 +312,19 @@ class StaticKVCache(KVCache):
     ) -> tuple[Tensor, Tensor]:
         """Write at the layer's current length. positions is ignored: the write index is
         the Python length of the layer."""
+        start, end = self._check_write(layer_idx, k, v)
+        self._keys[layer_idx, :, :, start:end].copy_(k)
+        self._values[layer_idx, :, :, start:end].copy_(v)
+        self._lengths[layer_idx] = end
+        # Only the filled part is returned, so attention never sees stale or zero slots.
+        return self._keys[layer_idx, :, :, :end], self._values[layer_idx, :, :, :end]
+
+    def _check_write(self, layer_idx: int, k: Tensor, v: Tensor) -> tuple[int, int]:
+        """Validate an update and return the token range [start, end) it will fill.
+
+        Everything is checked on the host, from shapes and the Python lengths, before any
+        state changes.
+        """
         # The buffer fixes B, n_head, head_dim, dtype and device from the start.
         _validate_update(self.n_layer, self._lengths, self._keys[0], layer_idx, k, v)
         start = self._lengths[layer_idx]
@@ -309,8 +334,71 @@ class StaticKVCache(KVCache):
                 f"layer {layer_idx} would hold {end} tokens ({start} + {k.shape[-2]}), "
                 f"over the cache capacity of {self.capacity}"
             )
-        self._keys[layer_idx, :, :, start:end].copy_(k)
-        self._values[layer_idx, :, :, start:end].copy_(v)
+        return start, end
+
+
+class CapturableKVCache(StaticKVCache):
+    """Static cache that writes at positions held in a tensor, so a decode step can be
+    captured in a CUDA graph.
+
+    update writes each new token at its absolute position with index_copy_ and returns
+    the whole buffer of the layer, so shapes stay the same from one step to the next.
+    The attention mask, built from the same positions, hides the slots not written yet.
+
+    The cache keeps two counts of its tokens. The Python lengths drive validation,
+    seq_len and capacity checks, and they advance only when the body of update runs.
+    During a graph replay update does not run on the host: the positions advance on the
+    device and the Python lengths stay behind until `advance` brings them back in line.
+    """
+
+    @property
+    def accepts_device_positions(self) -> bool:
+        return True
+
+    def update(
+        self, layer_idx: int, k: Tensor, v: Tensor, positions: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        """Write k and v at positions and return the full buffer of the layer.
+
+        positions is checked for shape, dtype and device only. Reading its values would
+        synchronise with the device, and inside a captured graph it is not even possible.
+        The caller guarantees they match the Python length of the layer and fit the
+        capacity, which the host checks below enforce for the eager path.
+        """
+        _, end = self._check_write(layer_idx, k, v)
+        if positions.dim() != 1 or positions.dtype != torch.long:
+            raise ValueError(
+                f"positions must be a 1D long tensor, got shape {tuple(positions.shape)} "
+                f"and dtype {positions.dtype}"
+            )
+        if positions.shape[0] != k.shape[-2]:
+            raise ValueError(
+                f"positions has {positions.shape[0]} entries for {k.shape[-2]} new tokens"
+            )
+        if positions.device != self.device:
+            raise ValueError(
+                f"positions are on {positions.device}, the cache is on {self.device}"
+            )
+        self._keys[layer_idx].index_copy_(2, positions, k)
+        self._values[layer_idx].index_copy_(2, positions, v)
         self._lengths[layer_idx] = end
-        # Only the filled part is returned, so attention never sees stale or zero slots.
-        return self._keys[layer_idx, :, :, :end], self._values[layer_idx, :, :, :end]
+        return self._keys[layer_idx], self._values[layer_idx]
+
+    def advance(self, n: int) -> None:
+        """Add n tokens to the Python length of every layer.
+
+        A graph replay runs the captured kernels, which write the cache and advance the
+        positions on the device, but not the Python body of update. After n replays of a
+        one-token step, advance(n) brings the host bookkeeping back in line with the
+        device.
+        """
+        if n < 0:
+            raise ValueError(f"n must be >= 0, got {n}")
+        if len(set(self._lengths)) != 1:
+            raise ValueError(f"cannot advance: the layers have different lengths {self._lengths}")
+        if self._lengths[0] + n > self.capacity:
+            raise ValueError(
+                f"advancing {self._lengths[0]} tokens by {n} exceeds the cache capacity of "
+                f"{self.capacity}"
+            )
+        self._lengths = [length + n for length in self._lengths]
