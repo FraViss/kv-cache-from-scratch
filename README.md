@@ -1,6 +1,6 @@
 # KV Cache From Scratch
 
-A from-scratch KV cache for greedy decoding with GPT-2 small. Correctness is checked against Hugging Face, and speed is measured against a calibrated cost model. On an RTX 5060 Laptop GPU at batch size 1 and context 512, an eager decode step takes 9.462 ms per token in float32 with the static cache. Almost all of that is host-side overhead: a model with the same structure but tiny matrices takes 9.290 ms. Capturing the step in a CUDA graph brings it to 2.545 ms (1.690 ms in bfloat16). On the CPU, growing the cache with `torch.cat` costs 25.403 ms per token at a 1000-token context against 19.213 ms for the preallocated cache. At batch size 8 over 1024 tokens, the dynamic cache leaves the CUDA allocator holding 3750.0 MiB reserved against 1866.0 MiB for the static one, for almost the same allocated memory (1402.9 against 1406.3 MiB). Every number in this file is in [docs/results.md](docs/results.md), generated from the JSON files in [benchmarks/results/](benchmarks/results/).
+A from-scratch KV cache for greedy decoding with GPT-2 small. Correctness is checked against Hugging Face, and speed is measured against a calibrated cost model. On an RTX 5060 Laptop GPU at batch size 1 and context 512, an eager decode step takes 9.462 ms per token in float32 with the static cache. Almost all of that is host-side overhead: a model with the same structure but tiny matrices takes 9.290 ms. Capturing the step in a CUDA graph brings it to 2.545 ms (1.690 ms in bfloat16). On the CPU, growing the cache with `torch.cat` costs 25.403 ms per token at a 1000-token context against 19.213 ms for the preallocated cache. At batch size 8 over 1024 tokens in float32, the dynamic cache leaves the CUDA allocator holding 3750.0 MiB reserved against 1866.0 MiB for the static one, for almost the same allocated memory (1402.9 against 1406.3 MiB); in bfloat16 the effect did not reappear. Every number in this file is in [docs/results.md](docs/results.md), generated from the JSON files in [benchmarks/results/](benchmarks/results/), or, for superseded runs, in [ADR-0013](docs/decisions/0013-measurement-variability.md) with the commit that measured them.
 
 ## What is implemented
 
@@ -94,7 +94,7 @@ At B=1 and T=512:
 ![Memory](docs/figures/memory.png)
 
 - **float32:** generating 992 tokens at batch size 8, the dynamic cache's allocated memory grows smoothly while the allocator's reserved memory climbs in steps to 3750.0 MiB. The static cache allocates once and stays at 1866.0 MiB reserved.
-- **bfloat16:** the two end close together (1420.0 against 1446.0 MiB reserved), so the gap depends on the allocator's history and the sizes involved, not only on the cache.
+- **bfloat16:** in bfloat16 the effect did not appear (1420.0 against 1446.0 MiB reserved): the extra reservation of the dynamic cache is not systematic.
 
 ### Graph cost against capacity
 
@@ -115,14 +115,14 @@ The captured step reads and attends over the whole buffer, so its cost follows t
 - **On the GPU, eager decode is limited by the CPU, not by memory.** The structural model, with the same 12 layers and 12 heads but tiny matrices, takes as long as GPT-2 small (9.290 against 9.462 ms per token in float32). Faster memory or a smaller cache would not move that number.
 - **The static cache is what makes capture possible, and capture removes the floor.** A graph needs fixed shapes and addresses, which concatenation cannot give. In the graph, the host enqueues a step in 0.074 ms, and the structural model's floor drops to 0.419 ms.
 - **Constant shapes have a price proportional to capacity.** The captured step reads and attends over its whole buffer, so an oversized buffer costs time on every step (capacity suite above).
-- **A dynamic cache can reserve far more than it allocates.** In float32 at B=8, the dynamic cache ends with almost the same allocated memory as the static one but about twice the reserved memory.
+- **A dynamic cache can reserve far more than it allocates.** In float32 at B=8, the dynamic cache ends with almost the same allocated memory as the static one but about twice the reserved memory; in bfloat16 the same comparison did not show that gap.
 - **Calibrate with the real shapes, and watch the L2.** At B=32 the float32 decode matmuls reach 1.575–2.986 TFLOP/s against a 8.938 TFLOP/s peak measured on a square 4096×4096 matmul. Repeating one small matmul keeps its weight in L2, and the bandwidth curve reaches 824.4 GB/s at 16 MiB, above the 344.2 GB/s DRAM read bandwidth. Such a calibration overstates how fast the decode reads its 495 MB of weights ([ADR-0013](docs/decisions/0013-measurement-variability.md)).
 - **This machine varies, and the cause was not identified.** The same captured graph in float32 runs at two levels. In the committed runs it takes 2.194–2.548 ms in the decode suite and up to 2.710 ms in the isolation run. Alternating with eager work does not explain the levels, and a logged memory-clock hypothesis was not confirmed by a rule fixed in advance ([ADR-0013](docs/decisions/0013-measurement-variability.md)). Float32 graph timings should be read as a range.
 - **Generated sequences of a small random model are a weak oracle.** Several deliberate bugs left the tokens of the small test model unchanged: a cache returning its whole unmasked buffer, or positions shifted only in attention, which is harmless at one token per step. Only logit comparisons caught them. The tests therefore compare logits, not only tokens.
 - **A prediction written down before measuring is worth keeping.** [ADR-0010](docs/decisions/0010-cuda-graph-decode-milestone.md) recorded, before any graph was captured, a bandwidth-bound prediction for graph decode, nearly constant in the context length.
   - Constancy held: 2.541–2.548 ms for T = 64…768 in float32.
   - The level did not: the measured step is above the graph roofline in the current results (1.656 ms in float32, 0.828 ms in bfloat16), by about the kernel floor plus a residual of about 0.46 ms.
-  - In float32, most of that residual matches weight reads at DRAM speed. In bfloat16 it stays unexplained.
+  - The bandwidth-based decomposition (kernel floor + weights and cache read at the calibrated DRAM bandwidth) predicts about 2.08 ms in float32. An earlier isolation run, recorded at commit e71febc (ADR-0013), measured the same captured graph at 2.17 ms, within 5% of that decomposition; the current runs sit mostly at the slower level, about 0.47 ms above it, and the difference between the two levels is the unexplained variability described above. In bfloat16 the residual of about 0.46 ms is not explained.
 
 ## Limitations
 
@@ -145,7 +145,9 @@ uv run python -m benchmarks.run --suite all --device cuda --dtype bfloat16
 uv run python -m benchmarks.run --suite decode --device cpu --dtype float32
 uv run python -m benchmarks.run --suite prefill --device cpu --dtype float32
 uv run python -m benchmarks.run --suite graph_isolation --device cuda --dtype float32
+uv run python -m benchmarks.run --suite graph_isolation --device cuda --dtype bfloat16
 uv run python -m benchmarks.run --suite shapes --device cuda --dtype float32
+uv run python -m benchmarks.run --suite shapes --device cuda --dtype bfloat16
 
 uv run --group bench python -m benchmarks.plots   # docs/figures/*.png from the JSON
 uv run python -m benchmarks.summary               # docs/results.md from the JSON
