@@ -17,6 +17,7 @@
   - [0009](decisions/0009-benchmark-methodology.md) — benchmark methodology
   - [0010](decisions/0010-cuda-graph-decode-milestone.md) — CUDA graph decode milestone
   - [0011](decisions/0011-position-based-attention-mask.md) — position-based attention mask
+  - [0012](decisions/0012-capturable-cache-and-graph-decoder.md) — capturable cache and graph decoder
 
 ## Decision records
 
