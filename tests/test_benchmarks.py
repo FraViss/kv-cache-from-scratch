@@ -24,8 +24,10 @@ from benchmarks.run import (
     run_batch_suite,
     run_capacity_suite,
     run_decode_suite,
+    run_graph_isolation_suite,
     run_overhead_suite,
     run_prefill_suite,
+    run_shapes_suite,
     run_suites,
     validate_benchmark_request,
 )
@@ -525,3 +527,103 @@ def test_run_suites_feeds_the_graph_floor_from_overhead_to_decode() -> None:
     )
     graph = next(record for record in results["decode"]["records"] if record["variant"] == "graph")
     assert graph["graph_floor_s"] == floor
+
+
+@pytest.mark.parametrize("suite", ["graph_isolation", "shapes"])
+def test_diagnostic_suites_are_rejected_on_cpu(suite: str) -> None:
+    with pytest.raises(ValueError, match="requires CUDA"):
+        validate_benchmark_request(suite, "cpu", "float32")
+
+
+def test_diagnostic_suites_require_cuda() -> None:
+    model = _small_benchmark_model()
+    with pytest.raises(ValueError, match="requires CUDA"):
+        run_graph_isolation_suite(model, model, "cpu", torch.float64)
+    with pytest.raises(ValueError, match="requires CUDA"):
+        run_shapes_suite("cpu", torch.float64, {"small": model.config})
+
+
+@requires_cuda
+def test_graph_isolation_suite_repeats_the_same_work_in_every_mode() -> None:
+    contexts = (4, 12)
+    result = run_graph_isolation_suite(
+        _small_cuda_model(),
+        _small_cuda_model(seed=1),
+        "cuda",
+        torch.float64,
+        contexts=contexts,
+        steps=3,
+        warmup=1,
+        repeats=3,
+        heat_seconds=0.0,
+        idle_s=0.0,
+    )
+    modes = (
+        "isolated_ascending",
+        "isolated_descending",
+        "after_idle",
+        "interleaved_with_eager",
+    )
+    assert result["modes"] == list(modes)
+    assert [block["mode"] for block in result["blocks"]] == list(modes)
+    assert result["blocks"][1]["order"] == [12, 4]
+    assert len(result["records"]) == len(modes) * 2 * len(contexts)
+    tokens: dict[tuple[str, int], list[list[int]]] = {}
+    for record in result["records"]:
+        assert set(record) >= {
+            "model",
+            "mode",
+            "context_len",
+            "cache_capacity",
+            "median_s",
+            "p25_s",
+            "p75_s",
+            "repeats_identical",
+            "nvidia_smi_before_block",
+            "nvidia_smi_after_block",
+        }
+        assert record["median_s"] > 0
+        assert record["repeats_identical"] is True
+        tokens.setdefault((record["model"], record["context_len"]), []).append(
+            record["generated_tokens"]
+        )
+    # The same (model, T) replays the same work in every mode.
+    for generated in tokens.values():
+        assert all(entry == generated[0] for entry in generated)
+
+
+@requires_cuda
+def test_shapes_suite_records_every_shape_batch_and_size() -> None:
+    config = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
+    result = run_shapes_suite(
+        "cuda",
+        torch.float32,
+        {"small": config},
+        batches=(1, 4),
+        calls=4,
+        sizes_mib=(1, 2),
+        warmup=1,
+        repeats=2,
+        heat_seconds=0.0,
+    )
+    layers = {record["layer"] for record in result["records"]}
+    assert layers == {"c_attn", "attn.c_proj", "c_fc", "mlp.c_proj", "lm_head"}
+    assert len(result["records"]) == 5 * 2
+    for record in result["records"]:
+        fan_in, fan_out = record["in_features"], record["out_features"]
+        bias = fan_out if record["bias"] else 0
+        assert record["weight_bytes"] == (fan_in * fan_out + bias) * 4
+        per_call = record["median_s"]
+        assert record["effective_bandwidth_GBs"] == pytest.approx(
+            record["weight_bytes"] / per_call / 1e9
+        )
+        assert record["effective_TFLOPs"] == pytest.approx(
+            2 * record["batch_size"] * fan_in * fan_out / per_call / 1e12
+        )
+    lm_head = [record for record in result["records"] if record["layer"] == "lm_head"]
+    assert all(record["bias"] is False and record["out_features"] == 100 for record in lm_head)
+    assert [record["size_mib"] for record in result["bandwidth_records"]] == [1, 2]
+    for record in result["bandwidth_records"]:
+        assert record["nbytes"] == record["size_mib"] * 2**20
+        assert record["effective_bandwidth_GBs"] > 0
+    assert set(result["blocks"]) == {"shapes", "bandwidth"}
