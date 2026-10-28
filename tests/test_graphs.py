@@ -128,3 +128,20 @@ def test_graph_generation_rejects_a_batch_size_mismatch() -> None:
 def test_graph_decoder_rejects_a_cpu_cache() -> None:
     with pytest.raises(ValueError, match="same CUDA device"):
         CUDAGraphDecoder(build_model("cpu"), capturable_cache(device="cpu"), 4)
+
+
+@requires_cuda
+def test_graph_generation_at_the_edge_of_capacity(cuda_model: GPT) -> None:
+    """Two new tokens with a capacity of exactly P + 1.
+
+    Warmup runs the step three times. If the state were restored only once at the end,
+    the Python lengths would reach P + 2 during the second warmup step, past the
+    capacity, and this test would fail with a clean ValueError from the capacity check
+    in update.
+    """
+    new_tokens = 2
+    prompt = random_ids(B, P)
+    cache = capturable_cache(capacity=P + 1)
+    output = generate_greedy_graph(cuda_model, prompt, new_tokens, cache)
+    assert torch.equal(output, generate_greedy_uncached(cuda_model, prompt, new_tokens))
+    assert cache.seq_len == cache.capacity
