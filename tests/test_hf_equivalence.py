@@ -7,10 +7,12 @@ from transformers import GPT2LMHeadModel
 
 from kvcache import (
     GPT,
+    CapturableKVCache,
     DynamicKVCache,
     KVCache,
     StaticKVCache,
     generate_greedy_cached,
+    generate_greedy_graph,
     generate_greedy_uncached,
     load_pretrained_gpt2,
 )
@@ -134,3 +136,26 @@ def test_pretrained_cached_logits_match_uncached_forward(
 
     assert cache.seq_len == ours.config.n_positions
     torch.testing.assert_close(torch.cat(step_logits, dim=1), full, atol=1e-9, rtol=0)
+
+
+@pytest.fixture(scope="module")
+def cuda_model() -> GPT:
+    return load_pretrained_gpt2(dtype=torch.float64, device="cuda", revision=GPT2_REVISION)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+@GENERATION_CASES
+def test_graph_generation_matches_hugging_face(
+    models: tuple[GPT, GPT2LMHeadModel],
+    cuda_model: GPT,
+    prompt_shape: tuple[int, int],
+    new_tokens: int,
+) -> None:
+    _, reference = models
+    generator = torch.Generator().manual_seed(1234)
+    prompt = torch.randint(0, cuda_model.config.vocab_size, prompt_shape, generator=generator)
+    cache = CapturableKVCache.from_config(
+        cuda_model.config, prompt_shape[0], dtype=torch.float64, device="cuda"
+    )
+    our_output = generate_greedy_graph(cuda_model, prompt.cuda(), new_tokens, cache)
+    assert torch.equal(our_output.cpu(), hugging_face_greedy(reference, prompt, new_tokens))
