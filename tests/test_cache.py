@@ -45,12 +45,22 @@ def random_kv(length: int, seed: int = 0, **shape_overrides: int) -> tuple[Tenso
     return k, v
 
 
+def update(cache: KVCache, layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
+    """cache.update with the positions the new tokens would get in a forward pass.
+
+    Layer 0 is updated first in a forward, so the other layers start where layer 0 did.
+    """
+    new = k.shape[-2]
+    start = cache.seq_len if layer_idx == 0 else cache.seq_len - new
+    return cache.update(layer_idx, k, v, torch.arange(start, start + new, device=k.device))
+
+
 def test_update_on_empty_cache_copies_the_input(model: GPT, cache_factory: CacheFactory) -> None:
     x = torch.randn(B, 5, SMALL.n_embd, dtype=torch.float64, generator=torch.Generator().manual_seed(0))
     with torch.no_grad():
         _, k, v = model.h[0].attn.project_qkv(x)
     cache = cache_factory(SMALL, B)
-    cached_k, cached_v = cache.update(0, k, v)
+    cached_k, cached_v = update(cache, 0, k, v)
     assert torch.equal(cached_k, k)
     assert torch.equal(cached_v, v)
     assert cache.seq_len == 5
@@ -67,7 +77,7 @@ def test_successive_updates_concatenate(cache_factory: CacheFactory) -> None:
     for i, (k, v) in enumerate(pieces):
         total += k.shape[-2]
         for layer_idx in range(SMALL.n_layer):
-            cached_k, cached_v = cache.update(layer_idx, k, v)
+            cached_k, cached_v = update(cache, layer_idx, k, v)
             assert torch.equal(cached_k, torch.cat([p[0] for p in pieces[: i + 1]], dim=-2))
             assert torch.equal(cached_v, torch.cat([p[1] for p in pieces[: i + 1]], dim=-2))
         assert cache.seq_len == total
@@ -86,7 +96,7 @@ def test_nbytes_after_model_forward(model: GPT) -> None:
 def test_reset_empties_the_cache(cache_factory: CacheFactory) -> None:
     cache = cache_factory(SMALL, B)
     for layer_idx in range(SMALL.n_layer):
-        cache.update(layer_idx, *random_kv(4))
+        update(cache, layer_idx, *random_kv(4))
     assert cache.seq_len == 4
     nbytes = cache.nbytes
     cache.reset()
@@ -95,7 +105,7 @@ def test_reset_empties_the_cache(cache_factory: CacheFactory) -> None:
     # A dynamic cache frees its tensors; a static one keeps its buffers allocated.
     assert cache.nbytes == (0 if cache.capacity is None else nbytes)
     k, v = random_kv(2, seed=1)
-    cached_k, cached_v = cache.update(0, k, v)
+    cached_k, cached_v = update(cache, 0, k, v)
     assert torch.equal(cached_k, k)
     assert torch.equal(cached_v, v)
 
@@ -103,60 +113,60 @@ def test_reset_empties_the_cache(cache_factory: CacheFactory) -> None:
 @pytest.mark.parametrize("layer_idx", [-1, SMALL.n_layer])
 def test_rejects_layer_idx_out_of_range(cache_factory: CacheFactory, layer_idx: int) -> None:
     with pytest.raises(ValueError, match="layer_idx"):
-        cache_factory(SMALL, B).update(layer_idx, *random_kv(3))
+        update(cache_factory(SMALL, B), layer_idx, *random_kv(3))
 
 
 def test_rejects_non_4d_tensors(cache_factory: CacheFactory) -> None:
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="4D"):
-        cache_factory(SMALL, B).update(0, k[0], v[0])
+        update(cache_factory(SMALL, B), 0, k[0], v[0])
 
 
 def test_rejects_k_and_v_with_different_shapes(cache_factory: CacheFactory) -> None:
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="same shape"):
-        cache_factory(SMALL, B).update(0, k, v[..., :-1])
+        update(cache_factory(SMALL, B), 0, k, v[..., :-1])
 
 
 def test_rejects_k_and_v_with_different_dtypes(cache_factory: CacheFactory) -> None:
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="share dtype and device"):
-        cache_factory(SMALL, B).update(0, k, v.float())
+        update(cache_factory(SMALL, B), 0, k, v.float())
 
 
 @pytest.mark.parametrize("dimension", ["batch", "n_head", "head_dim"])
 def test_rejects_shape_different_from_the_cache(cache_factory: CacheFactory, dimension: str) -> None:
     cache = cache_factory(SMALL, B)
-    cache.update(0, *random_kv(3))
+    update(cache, 0, *random_kv(3))
     other = {"batch": B + 1, "n_head": SMALL.n_head + 1, "head_dim": SMALL.head_dim + 1}
     name = "B" if dimension == "batch" else dimension
     with pytest.raises(ValueError, match=f"^{name} of the new keys"):
-        cache.update(0, *random_kv(1, **{dimension: other[dimension]}))
+        update(cache, 0, *random_kv(1, **{dimension: other[dimension]}))
 
 
 def test_rejects_dtype_different_from_the_cache(cache_factory: CacheFactory) -> None:
     cache = cache_factory(SMALL, B)
-    cache.update(0, *random_kv(3))
+    update(cache, 0, *random_kv(3))
     k, v = random_kv(1)
     with pytest.raises(ValueError, match="dtype torch.float32 does not match"):
-        cache.update(0, k.float(), v.float())
+        update(cache, 0, k.float(), v.float())
 
 
 def test_rejects_device_different_from_the_cache(cache_factory: CacheFactory) -> None:
     cache = cache_factory(SMALL, B)
-    cache.update(0, *random_kv(3))
+    update(cache, 0, *random_kv(3))
     k, v = random_kv(1)
     with pytest.raises(ValueError, match="device meta does not match"):
-        cache.update(0, k.to("meta"), v.to("meta"))
+        update(cache, 0, k.to("meta"), v.to("meta"))
 
 
 def test_rejects_layer_updated_twice(cache_factory: CacheFactory) -> None:
     cache = cache_factory(SMALL, B)
     for layer_idx in range(SMALL.n_layer):
-        cache.update(layer_idx, *random_kv(3))
+        update(cache, layer_idx, *random_kv(3))
     used_nbytes = cache.used_nbytes
     with pytest.raises(ValueError, match="updated twice or skipped"):
-        cache.update(1, *random_kv(3))
+        update(cache, 1, *random_kv(3))
     # A rejected update leaves the cache as it was.
     assert cache.seq_len == 3
     assert cache.used_nbytes == used_nbytes
@@ -165,16 +175,16 @@ def test_rejects_layer_updated_twice(cache_factory: CacheFactory) -> None:
 def test_rejects_layer_skipped(cache_factory: CacheFactory) -> None:
     cache = cache_factory(SMALL, B)
     for layer_idx in range(SMALL.n_layer):
-        cache.update(layer_idx, *random_kv(3))
-    cache.update(0, *random_kv(1))  # layer 1 is skipped in this forward
-    cache.update(0, *random_kv(1))
+        update(cache, layer_idx, *random_kv(3))
+    update(cache, 0, *random_kv(1))  # layer 1 is skipped in this forward
+    update(cache, 0, *random_kv(1))
     with pytest.raises(ValueError, match="updated twice or skipped"):
-        cache.update(1, *random_kv(1))
+        update(cache, 1, *random_kv(1))
 
 
 def test_rejects_later_layer_before_layer_0(cache_factory: CacheFactory) -> None:
     with pytest.raises(ValueError, match="updated twice or skipped"):
-        cache_factory(SMALL, B).update(1, *random_kv(3))
+        update(cache_factory(SMALL, B), 1, *random_kv(3))
 
 
 def test_model_rejects_position_offset_with_cache(model: GPT, cache_factory: CacheFactory) -> None:
@@ -246,10 +256,12 @@ def test_static_cache_used_nbytes_after_model_forward(model: GPT) -> None:
 def test_static_cache_writes_in_place(model: GPT) -> None:
     cache = static_cache()
     pointers = []
-    update = cache.update
+    original_update = cache.update
 
-    def recording_update(layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
-        cached_k, cached_v = update(layer_idx, k, v)
+    def recording_update(
+        layer_idx: int, k: Tensor, v: Tensor, positions: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        cached_k, cached_v = original_update(layer_idx, k, v, positions)
         if layer_idx == 0:
             pointers.append(cached_k.data_ptr())
         return cached_k, cached_v
@@ -267,10 +279,10 @@ def test_static_cache_writes_in_place(model: GPT) -> None:
 def test_static_cache_rejects_update_past_capacity() -> None:
     cache = static_cache(max_seq_len=5)
     for layer_idx in range(SMALL.n_layer):
-        cache.update(layer_idx, *random_kv(4))
+        update(cache, layer_idx, *random_kv(4))
     keys, values = cache._keys.clone(), cache._values.clone()
     with pytest.raises(ValueError, match="over the cache capacity of 5"):
-        cache.update(0, *random_kv(2, seed=1))
+        update(cache, 0, *random_kv(2, seed=1))
     assert cache.seq_len == 4
     assert torch.equal(cache._keys, keys)
     assert torch.equal(cache._values, values)
@@ -280,7 +292,7 @@ def test_static_cache_rejects_dtype_different_from_the_buffer() -> None:
     cache = static_cache()
     k, v = random_kv(3)
     with pytest.raises(ValueError, match="float32 does not match the cache dtype torch.float64"):
-        cache.update(0, k.float(), v.float())
+        update(cache, 0, k.float(), v.float())
     assert cache.seq_len == 0
 
 

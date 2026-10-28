@@ -61,7 +61,7 @@ class CausalSelfAttention(nn.Module):
             if layer_idx is None:
                 raise ValueError("layer_idx is required when a cache is given")
             # Update before attending: the new tokens must see themselves.
-            k, v = cache.update(layer_idx, k, v)
+            k, v = cache.update(layer_idx, k, v, positions)
         return self.c_proj(self.attend(q, k, v, positions))
 
 

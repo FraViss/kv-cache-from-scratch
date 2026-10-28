@@ -17,11 +17,23 @@ class KVCache(ABC):
     """
 
     @abstractmethod
-    def update(self, layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
+    def update(
+        self, layer_idx: int, k: Tensor, v: Tensor, positions: Tensor
+    ) -> tuple[Tensor, Tensor]:
         """Append k and v, shaped (B, n_head, T_new, head_dim), to layer layer_idx.
+
+        positions is a long tensor of shape (T_new,), on the device of k, with the
+        absolute position of each new token: the same tensor the attention mask uses.
+        A cache that tracks its own write index may ignore it.
 
         Returns the layer's full keys and values, shaped (B, n_head, T_tot, head_dim).
         """
+
+    @property
+    def accepts_device_positions(self) -> bool:
+        """Whether the cache writes at the positions it is given, so a forward pass can
+        take its positions from a tensor on the device instead of from seq_len."""
+        return False
 
     @property
     @abstractmethod
@@ -161,7 +173,11 @@ class DynamicKVCache(KVCache):
         self._keys = [None] * self._n_layer
         self._values = [None] * self._n_layer
 
-    def update(self, layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
+    def update(
+        self, layer_idx: int, k: Tensor, v: Tensor, positions: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        """Append along the token dimension. positions is ignored: concatenation always
+        appends after the tokens already cached."""
         lengths = [0 if t is None else t.shape[-2] for t in self._keys]
         # Layer 0 fixes B, n_head, head_dim, dtype and device for the whole cache.
         _validate_update(self._n_layer, lengths, self._keys[0], layer_idx, k, v)
@@ -265,7 +281,11 @@ class StaticKVCache(KVCache):
         update only ever returns the filled part of a layer."""
         self._lengths = [0] * self.n_layer
 
-    def update(self, layer_idx: int, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
+    def update(
+        self, layer_idx: int, k: Tensor, v: Tensor, positions: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        """Write at the layer's current length. positions is ignored: the write index is
+        the Python length of the layer."""
         # The buffer fixes B, n_head, head_dim, dtype and device from the start.
         _validate_update(self.n_layer, self._lengths, self._keys[0], layer_idx, k, v)
         start = self._lengths[layer_idx]
