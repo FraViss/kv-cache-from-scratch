@@ -1,24 +1,189 @@
 # KV Cache From Scratch
 
-A from-scratch implementation of key-value caching for autoregressive inference of a decoder-only GPT, checked against a reference and measured with benchmarks.
+A from-scratch KV cache for greedy decoding with GPT-2 small. Correctness is checked against Hugging Face, and speed is measured against a calibrated cost model. On an RTX 5060 Laptop GPU at batch size 1 and context 512, an eager decode step takes 9.462 ms per token in float32 with the static cache. Almost all of that is host-side overhead: a model with the same structure but tiny matrices takes 9.290 ms. Capturing the step in a CUDA graph brings it to 2.545 ms (1.690 ms in bfloat16). On the CPU, growing the cache with `torch.cat` costs 25.403 ms per token at a 1000-token context against 19.213 ms for the preallocated cache. At batch size 8 over 1024 tokens, the dynamic cache leaves the CUDA allocator holding 3750.0 MiB reserved against 1866.0 MiB for the static one, for almost the same allocated memory (1402.9 against 1406.3 MiB). Every number in this file is in [docs/results.md](docs/results.md), generated from the JSON files in [benchmarks/results/](benchmarks/results/).
 
-**Status: work in progress**
+## What is implemented
 
-## Planned milestones
+- **GPT-2 small from scratch** ([src/kvcache/model.py](src/kvcache/model.py)), loading the pretrained `gpt2` safetensors checkpoint with a strict loader ([src/kvcache/weights.py](src/kvcache/weights.py)). Hugging Face `transformers` is used only as a test oracle.
+- **Uncached baseline**: every step forwards the whole sequence ([src/kvcache/generation.py](src/kvcache/generation.py)).
+- **Three caches behind one interface** ([src/kvcache/cache.py](src/kvcache/cache.py)):
+  - `DynamicKVCache` grows by `torch.cat`.
+  - `StaticKVCache` preallocates its buffers once and writes in place.
+  - `CapturableKVCache` writes at token positions held in a tensor on the device and returns its whole buffer, so shapes stay constant.
+- **A CUDA graph decoder** ([src/kvcache/graphs.py](src/kvcache/graphs.py)): an eager prefill, then one decode step captured once and replayed. The step feeds itself, advancing tokens, positions and the output index on the device.
+- **An attention mask built from absolute positions**: key j is visible to the query at position p when j ≤ p. It is the usual causal mask on every eager path, and it hides the unwritten slots of a buffer.
 
-1. **M1** — GPT-2 decoder from scratch, weight loader, and greedy generation without a cache (baseline), with logits checked against Hugging Face.
-2. **M2** — Dynamic cache (concatenation), with tests that logits match the uncached path.
-3. **M3** — Static preallocated cache with a write index.
-4. **M4** — Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model.
-5. **M5** — Decode step captured in a CUDA graph with the static cache, to remove the host-side overhead that M4 found on the GPU. The final write-up of M4 covers M5 too.
+How it is verified:
 
-## Development
+- Logits match Hugging Face within 1.6e-13 in float64.
+- Cached and uncached logits match within 8.3e-13 on a 1000-token prompt.
+- Greedy sequences are identical to Hugging Face `generate` token by token for the uncached path, both eager caches and the CUDA graph decoder.
+- The suite has 202 fast tests (`uv run pytest`) and 12 integration tests against Hugging Face (`uv run pytest -m integration`).
+- Each new test was also checked by introducing deliberate bugs (wrong mask offset, positions shifted only in attention, a cache returning its whole buffer, a missing write-index advance) and confirming that tests fail.
+
+See [Correctness in docs/results.md](docs/results.md#correctness).
+
+## Background
+
+**Why a cache.** Without one, decoding token t forwards all t tokens again, so each step costs more as the context grows. With a cache, each layer stores the keys and values of past tokens, and a decode step forwards one token and attends over the stored ones.
+
+**Prefill and decode.** The prefill forwards the prompt once and fills the cache: large matmuls, limited by compute. Each decode step forwards one token per sequence: every weight is read once to do a few FLOPs, so at small batch sizes the step is limited by memory bandwidth, or, as measured here, by launch overhead.
+
+**Memory per token.** Keys plus values for one token cost
+
+```
+2 · n_layer · n_embd · bytes_per_element = 2 · 12 · 768 · 4 = 73,728 bytes = 72 KiB  (float32)
+```
+
+so a full 1024-token context is 72.0 MiB per sequence in float32 and 36.0 MiB in bfloat16.
+
+**Roofline.** A step can be no faster than
+
+```
+time ≥ max(FLOPs / peak FLOP/s, bytes moved / memory bandwidth)
+```
+
+FLOPs and bytes come from [benchmarks/costs.py](benchmarks/costs.py). The peak and the bandwidth are measured on this machine ([benchmarks/calibrate.py](benchmarks/calibrate.py)), not taken from a datasheet: 344.2 GB/s read bandwidth, 8.938 TFLOP/s in float32 and 32.099 TFLOP/s in bfloat16 on the GPU.
+
+## Results
+
+All measurements:
+
+- **GPU:** NVIDIA GeForce RTX 5060 Laptop GPU (compute capability 12.0, driver 610.74).
+- **CPU:** Intel64 Family 6 Model 183 (20 logical CPUs).
+- **Software:** Windows 11, Python 3.12.13, PyTorch 2.11.0+cu128 (CUDA 12.8), with TF32 off (`float32_matmul_precision = "highest"`).
+
+Times are medians. The method (CUDA events, interleaved variants, untimed setup) is in [ADR-0009](docs/decisions/0009-benchmark-methodology.md). Full tables with the source file and the measuring commit of each number are in [docs/results.md](docs/results.md).
+
+### Decode on the GPU
+
+![GPU decode](docs/figures/decode_gpu.png)
+
+- **Uncached** decode grows with the context, from 8.208 ms at T=64 to 72.988 ms at T=1000 in float32.
+- **Eager cached** decode stays flat around 9 ms per token whatever the context (8.589–10.048 ms in float32), well above its roofline (1.452–2.084 ms).
+- **The CUDA graph** brings the step to 2.194–2.548 ms in float32 and 1.535–1.695 ms in bfloat16. Its cost is nearly independent of T, because it always reads the whole buffer.
+- **Sequences:** in float32 all four variants produce the same tokens at every T. In bfloat16 several sequences differ between variants, which is why token identity is only checked at one precision ([ADR-0009](docs/decisions/0009-benchmark-methodology.md)).
+
+### Decode on the CPU
+
+![CPU decode](docs/figures/decode_cpu.png)
+
+On the CPU the cache pays off at once: at T=1000 the uncached step takes 962.456 ms against 19.213 ms with the static cache. Here the cost of `torch.cat` is visible. At T=64 the two caches are equal (17.666 and 17.667 ms), and at T=1000 the dynamic cache takes 25.403 ms against 19.213 ms, because every step copies the whole past.
+
+### Where a decode step goes
+
+![Time breakdown](docs/figures/time_breakdown.png)
+
+At B=1 and T=512:
+
+- **Eager, float32:** the 9.462 ms step is 9.290 ms of CPU overhead (the structural model in eager mode) plus 0.172 ms.
+- **Eager, bfloat16:** the structural model (9.632 ms) is slower than the real one (8.906 ms), so the "rest" is negative (−0.726 ms). That says the overhead measurement is noisier than the GPU work it hides.
+- **Graph, float32:** the 2.545 ms step is a 0.419 ms kernel floor, 1.437 ms of weight reads and 0.219 ms of cache reads at the calibrated bandwidth, and a 0.470 ms residual.
+- **Graph, bfloat16:** the residual is 0.456 ms.
+
+### Batch throughput
+
+![Batch throughput](docs/figures/batch_throughput.png)
+
+- At batch size 1 the graph decodes 415 tokens/s against 109 for the static cache in float32, and 709 against 111 in bfloat16.
+- At B=32 the graph reaches 3717 tokens/s in float32 and 9291 in bfloat16, against 3331 and 3016 for the static cache and 1608 and 2246 for the dynamic one.
+- In float32 the graph's advantage shrinks with batch size, because GPU work replaces launch overhead as the limit.
+
+### Memory
+
+![Memory](docs/figures/memory.png)
+
+- **float32:** generating 992 tokens at batch size 8, the dynamic cache's allocated memory grows smoothly while the allocator's reserved memory climbs in steps to 3750.0 MiB. The static cache allocates once and stays at 1866.0 MiB reserved.
+- **bfloat16:** the two end close together (1420.0 against 1446.0 MiB reserved), so the gap depends on the allocator's history and the sizes involved, not only on the cache.
+
+### Graph cost against capacity
+
+![Capacity](docs/figures/capacity.png)
+
+The captured step reads and attends over the whole buffer, so its cost follows the capacity, not the tokens written. At batch size 8, with the same 64-token context and 16 steps, the step takes 2.534 ms with a 128-token buffer and 4.393 ms with a 1024-token buffer in float32 (1.575 and 2.425 ms in bfloat16). The roofline predicts the same trend (1.656 to 3.191 ms in float32).
+
+### Roofline
+
+![Roofline](docs/figures/roofline.png)
+
+- **Decode** sits far left at low arithmetic intensity: 0.50 FLOP/byte at B=1 in float32, rising to 4.95 at B=32. It stays below the bandwidth roof.
+- **The graph** raises achieved throughput at every batch size: 0.111 against 0.029 TFLOP/s at B=1 in float32.
+- **Prefill** is compute-bound and reaches 4.864 TFLOP/s in float32 at T=512 and 12.097 TFLOP/s in bfloat16 at T=1024, well under the calibrated peaks.
+
+## What the measurements taught
+
+- **On the GPU, eager decode is limited by the CPU, not by memory.** The structural model, with the same 12 layers and 12 heads but tiny matrices, takes as long as GPT-2 small (9.290 against 9.462 ms per token in float32). Faster memory or a smaller cache would not move that number.
+- **The static cache is what makes capture possible, and capture removes the floor.** A graph needs fixed shapes and addresses, which concatenation cannot give. In the graph, the host enqueues a step in 0.074 ms, and the structural model's floor drops to 0.419 ms.
+- **Constant shapes have a price proportional to capacity.** The captured step reads and attends over its whole buffer, so an oversized buffer costs time on every step (capacity suite above).
+- **A dynamic cache can reserve far more than it allocates.** In float32 at B=8, the dynamic cache ends with almost the same allocated memory as the static one but about twice the reserved memory.
+- **Calibrate with the real shapes, and watch the L2.** At B=32 the float32 decode matmuls reach 1.575–2.986 TFLOP/s against a 8.938 TFLOP/s peak measured on a square 4096×4096 matmul. Repeating one small matmul keeps its weight in L2, and the bandwidth curve reaches 824.4 GB/s at 16 MiB, above the 344.2 GB/s DRAM read bandwidth. Such a calibration overstates how fast the decode reads its 495 MB of weights ([ADR-0013](docs/decisions/0013-measurement-variability.md)).
+- **This machine varies, and the cause was not identified.** The same captured graph in float32 runs at two levels. In the committed runs it takes 2.194–2.548 ms in the decode suite and up to 2.710 ms in the isolation run. Alternating with eager work does not explain the levels, and a logged memory-clock hypothesis was not confirmed by a rule fixed in advance ([ADR-0013](docs/decisions/0013-measurement-variability.md)). Float32 graph timings should be read as a range.
+- **Generated sequences of a small random model are a weak oracle.** Several deliberate bugs left the tokens of the small test model unchanged: a cache returning its whole unmasked buffer, or positions shifted only in attention, which is harmless at one token per step. Only logit comparisons caught them. The tests therefore compare logits, not only tokens.
+- **A prediction written down before measuring is worth keeping.** [ADR-0010](docs/decisions/0010-cuda-graph-decode-milestone.md) recorded, before any graph was captured, a bandwidth-bound prediction for graph decode, nearly constant in the context length.
+  - Constancy held: 2.541–2.548 ms for T = 64…768 in float32.
+  - The level did not: the measured step is above the graph roofline in the current results (1.656 ms in float32, 0.828 ms in bfloat16), by about the kernel floor plus a residual of about 0.46 ms.
+  - In float32, most of that residual matches weight reads at DRAM speed. In bfloat16 it stays unexplained.
+
+## Limitations
+
+- **One machine:** a Windows laptop with an RTX 5060 Laptop GPU. Its power and clock states cannot be locked without administrator rights, and they vary (ADR-0013).
+- **One model:** GPT-2 small, with learned absolute positions, standard multi-head attention, no RoPE and no GQA.
+- **Greedy decoding only**, with batches of equal-length prompts. Padding, mixed lengths and a block allocator are deferred ([ADR-0002](docs/decisions/0002-core-scope-and-deferred-serving.md), [ADR-0006](docs/decisions/0006-generation-contract.md)).
+- **The bfloat16 graph residual** (about 0.46 ms per token at B=1) is not explained.
+- **Token identity is only meaningful at one precision.** Correctness is established in float64; benchmark sequences in bfloat16 differ between variants in several cases.
+
+## Reproduce
 
 ```bash
-uv sync
-uv run pytest
+uv sync                                    # Python 3.12, PyTorch cu128, dev and bench groups
+uv run pytest                              # fast tests
+uv run pytest -m integration               # Hugging Face equivalence (downloads ~550 MB once)
+
+uv run python -m benchmarks.calibrate --device all
+uv run python -m benchmarks.run --suite all --device cuda --dtype float32
+uv run python -m benchmarks.run --suite all --device cuda --dtype bfloat16
+uv run python -m benchmarks.run --suite decode --device cpu --dtype float32
+uv run python -m benchmarks.run --suite prefill --device cpu --dtype float32
+uv run python -m benchmarks.run --suite graph_isolation --device cuda --dtype float32
+uv run python -m benchmarks.run --suite shapes --device cuda --dtype float32
+
+uv run --group bench python -m benchmarks.plots   # docs/figures/*.png from the JSON
+uv run python -m benchmarks.summary               # docs/results.md from the JSON
+
+uv run --group demo jupyter nbconvert --to notebook --execute --inplace notebooks/demo.ipynb
 ```
+
+Benchmarks refuse to run on a tree with uncommitted changes outside `benchmarks/results/`, and each JSON records the commit that measured it. `--allow-dirty` exists for experiments, and its results are marked as such.
+
+## Project structure
+
+```
+src/kvcache/      model, weight loader, caches, generation, CUDA graph decoder
+benchmarks/       cost model, calibration, timing harness, suites, plots, summary
+benchmarks/results/  committed JSON results and the GPU clock log
+tests/            unit, CUDA and integration tests
+docs/             engineering log: status, decision records, results, figures
+notebooks/        executed demonstration notebook
+```
+
+## Engineering log
+
+[docs/](docs/README.md) is the project logbook; [docs/status.md](docs/status.md) has the current state. Decision records:
+
+- [0001](docs/decisions/0001-gpt2-decoder-as-base-model.md) — GPT-2 small, from scratch, as the base model
+- [0002](docs/decisions/0002-core-scope-and-deferred-serving.md) — a core of milestones, with serving deferred
+- [0003](docs/decisions/0003-load-weights-from-safetensors.md) — weights from safetensors, `transformers` only as an oracle
+- [0004](docs/decisions/0004-float64-for-correctness-tests.md) — float64 for correctness tests
+- [0005](docs/decisions/0005-token-id-api-and-tokenizer.md) — token-id API; tiktoken only for demos
+- [0006](docs/decisions/0006-generation-contract.md) — greedy, exactly N tokens, no sliding window, equal-length batches
+- [0007](docs/decisions/0007-mutable-kv-cache-interface.md) — a mutable cache object with `update`
+- [0008](docs/decisions/0008-preallocated-static-kv-cache.md) — the preallocated static cache
+- [0009](docs/decisions/0009-benchmark-methodology.md) — benchmark methodology
+- [0010](docs/decisions/0010-cuda-graph-decode-milestone.md) — the CUDA graph milestone and its recorded prediction
+- [0011](docs/decisions/0011-position-based-attention-mask.md) — the attention mask built from absolute positions
+- [0012](docs/decisions/0012-capturable-cache-and-graph-decoder.md) — the capturable cache and the graph decoder
+- [0013](docs/decisions/0013-measurement-variability.md) — measurement variability and what it rules out
 
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).
