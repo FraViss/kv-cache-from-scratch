@@ -10,6 +10,7 @@ A from-scratch implementation of key-value caching for autoregressive inference 
 2. **M2** — Dynamic cache (concatenation), with tests that logits match the uncached path.
 3. **M3** — Static preallocated cache with a write index.
 4. **M4** — Benchmarks (tokens/s versus length, memory versus length, CPU and GPU) compared with the theoretical cost model.
+5. **M5** — Decode step captured in a CUDA graph with the static cache, to remove the host-side overhead that M4 found on the GPU. The final write-up of M4 covers M5 too.
 
 ## Development
 
