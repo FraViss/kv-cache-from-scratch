@@ -193,7 +193,7 @@ def test_model_rejects_cache_past_n_positions(model: GPT, cache_factory: CacheFa
 def test_attention_requires_layer_idx_with_cache(model: GPT) -> None:
     x = torch.zeros(1, 3, SMALL.n_embd, dtype=torch.float64)
     with pytest.raises(ValueError, match="layer_idx"):
-        model.h[0].attn(x, DynamicKVCache(SMALL.n_layer))
+        model.h[0].attn(x, torch.arange(3), DynamicKVCache(SMALL.n_layer))
 
 
 def test_attend_with_more_keys_than_queries(model: GPT) -> None:
@@ -212,7 +212,9 @@ def test_attend_with_more_keys_than_queries(model: GPT) -> None:
         expected[:, :, i, :] = (weights @ v[:, :, :visible, :]).squeeze(-2)
     expected = expected.transpose(1, 2).reshape(B, Tq, SMALL.n_embd)
 
-    torch.testing.assert_close(model.h[0].attn.attend(q, k, v), expected, atol=1e-12, rtol=0)
+    q_positions = torch.arange(Tk - Tq, Tk)
+    actual = model.h[0].attn.attend(q, k, v, q_positions)
+    torch.testing.assert_close(actual, expected, atol=1e-12, rtol=0)
 
 
 def static_cache(batch_size: int = B, max_seq_len: int | None = None) -> StaticKVCache:

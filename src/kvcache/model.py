@@ -24,31 +24,45 @@ class CausalSelfAttention(nn.Module):
         v = v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
         return q, k, v
 
-    def attend(self, q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+    def attend(self, q: Tensor, k: Tensor, v: Tensor, q_positions: Tensor) -> Tensor:
         """Causal attention over (B, n_head, T, head_dim) inputs, returned as (B, Tq, C).
 
-        Keys may be longer than queries: the queries are taken to be the last Tq
-        positions, so query i sees keys j <= i + (Tk - Tq).
+        q_positions is a long tensor of shape (Tq,), on the device of q, holding the
+        absolute position of each query; it is the same for every sequence in the batch,
+        since batches hold prompts of equal length (ADR-0006). Key j is visible to the
+        query at position p when j <= p.
+
+        For the uncached path and for the current caches, the keys are exactly the tokens
+        so far (Tk of them) and the queries sit at positions Tk - Tq to Tk - 1, so this is
+        the usual causal mask. When k and v are a buffer longer than the tokens written,
+        the unwritten slots have an index above every query position and stay masked.
+        Masked slots must still hold finite values: their weight is 0, and 0 * NaN is
+        NaN. The zero-initialised buffers of the static cache guarantee that.
         """
         B, _, Tq, _ = q.shape
         Tk = k.shape[-2]
         scores = q @ k.transpose(-2, -1) / math.sqrt(self.head_dim)
-        mask = torch.ones(Tq, Tk, dtype=torch.bool, device=q.device).tril(diagonal=Tk - Tq)
+        mask = torch.arange(Tk, device=q.device)[None, :] <= q_positions[:, None]
         scores = scores.masked_fill(~mask, float("-inf"))
         weights = torch.softmax(scores, dim=-1)
         out = weights @ v
         return out.transpose(1, 2).contiguous().view(B, Tq, self.n_head * self.head_dim)
 
     def forward(
-        self, x: Tensor, cache: KVCache | None = None, layer_idx: int | None = None
+        self,
+        x: Tensor,
+        positions: Tensor,
+        cache: KVCache | None = None,
+        layer_idx: int | None = None,
     ) -> Tensor:
+        """positions holds the absolute position of each token of x, shaped (T,)."""
         q, k, v = self.project_qkv(x)
         if cache is not None:
             if layer_idx is None:
                 raise ValueError("layer_idx is required when a cache is given")
             # Update before attending: the new tokens must see themselves.
             k, v = cache.update(layer_idx, k, v)
-        return self.c_proj(self.attend(q, k, v))
+        return self.c_proj(self.attend(q, k, v, positions))
 
 
 class MLP(nn.Module):
@@ -71,9 +85,13 @@ class Block(nn.Module):
         self.mlp = MLP(config)
 
     def forward(
-        self, x: Tensor, cache: KVCache | None = None, layer_idx: int | None = None
+        self,
+        x: Tensor,
+        positions: Tensor,
+        cache: KVCache | None = None,
+        layer_idx: int | None = None,
     ) -> Tensor:
-        x = x + self.attn(self.ln_1(x), cache, layer_idx)
+        x = x + self.attn(self.ln_1(x), positions, cache, layer_idx)
         x = x + self.mlp(self.ln_2(x))
         return x
 
@@ -134,8 +152,10 @@ class GPT(nn.Module):
                 f"{position_offset + T} exceeds n_positions ({self.config.n_positions})"
             )
 
+        # One tensor of absolute positions feeds both the position embedding and the
+        # attention mask of every block.
         positions = torch.arange(position_offset, position_offset + T, device=input_ids.device)
         x = self.wte(input_ids) + self.wpe(positions)
         for layer_idx, block in enumerate(self.h):
-            x = block(x, cache, layer_idx)
+            x = block(x, positions, cache, layer_idx)
         return self.lm_head(self.ln_f(x))
