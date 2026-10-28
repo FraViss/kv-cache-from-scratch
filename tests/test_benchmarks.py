@@ -20,9 +20,13 @@ from benchmarks.costs import (
 from benchmarks.machine import machine_info, require_clean_tree
 from benchmarks.opcount import count_ops
 from benchmarks.run import (
+    _decode_prediction,
+    run_batch_suite,
+    run_capacity_suite,
     run_decode_suite,
     run_overhead_suite,
     run_prefill_suite,
+    run_suites,
     validate_benchmark_request,
 )
 from benchmarks.timing import time_fn, time_interleaved, time_interleaved_staged
@@ -326,3 +330,198 @@ def test_cpu_bfloat16_request_is_rejected() -> None:
 def test_cpu_overhead_request_is_rejected() -> None:
     with pytest.raises(ValueError, match="requires CUDA"):
         validate_benchmark_request("overhead", "cpu", "float32")
+
+
+requires_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+
+
+def test_decode_suite_on_cpu_has_no_graph_variant() -> None:
+    result = run_decode_suite(
+        _small_benchmark_model(),
+        "cpu",
+        torch.float64,
+        _small_calibration(),
+        contexts=(4,),
+        steps=2,
+        warmup=0,
+        repeats=2,
+        op_context=8,
+    )
+    assert [record["variant"] for record in result["records"]] == ["uncached", "dynamic", "static"]
+    assert set(result["opcounts"]) == {"dynamic", "static"}
+    for record in result["records"]:
+        assert len(record["generated_tokens"][0]) == 2
+        assert record["matches_uncached"] is True
+
+
+def test_graph_prediction_does_not_depend_on_the_step() -> None:
+    model = _small_benchmark_model()
+    calibration = _small_calibration()
+    short = _decode_prediction(model, "graph", 2, 2, 1, 8, calibration, capacity=32)
+    long = _decode_prediction(model, "graph", 20, 2, 1, 8, calibration, capacity=32)
+    assert short == long
+    assert short["mean_flops_per_token"] == flops_per_token(model.config, 32)
+    with pytest.raises(ValueError, match="capacity"):
+        _decode_prediction(model, "graph", 2, 2, 1, 8, calibration)
+
+
+def test_capacity_suite_requires_cuda() -> None:
+    with pytest.raises(ValueError, match="requires CUDA"):
+        run_capacity_suite(_small_benchmark_model(), "cpu", torch.float64, _small_calibration())
+    with pytest.raises(ValueError, match="requires CUDA"):
+        validate_benchmark_request("capacity", "cpu", "float32")
+
+
+def _small_cuda_model(seed: int = 0) -> GPT:
+    torch.manual_seed(seed)
+    config = GPT2Config(vocab_size=100, n_positions=32, n_embd=64, n_layer=2, n_head=4)
+    return GPT(config).to(dtype=torch.float64, device="cuda").eval()
+
+
+@requires_cuda
+def test_decode_suite_graph_variant_matches_in_float64() -> None:
+    result = run_decode_suite(
+        _small_cuda_model(),
+        "cuda",
+        torch.float64,
+        _small_calibration(),
+        contexts=(4, 8),
+        steps=3,
+        warmup=1,
+        repeats=2,
+        op_context=8,
+        graph_floor_s=1e-3,
+    )
+    graph = [record for record in result["records"] if record["variant"] == "graph"]
+    assert len(graph) == 2
+    assert set(result["opcounts"]) == {"dynamic", "static", "graph"}
+    assert all(record["sequences_match"] is True for record in result["records"])
+    for record in graph:
+        assert record["cache_capacity"] == 32
+        assert record["graph_floor_s"] == 1e-3
+        assert record["graph_floor_plus_bandwidth_per_token_s"] > 1e-3
+        assert record["launch_limited_per_step_s"] is None
+        assert record["median_s"] > 0
+        assert len(record["generated_tokens"][0]) == 3
+
+
+@requires_cuda
+def test_batch_suite_graph_variant_uses_the_smallest_capacity() -> None:
+    context, steps = 6, 3
+    result = run_batch_suite(
+        _small_cuda_model(),
+        "cuda",
+        torch.float64,
+        _small_calibration(),
+        batches=(1, 2),
+        context=context,
+        steps=steps,
+        warmup=1,
+        repeats=2,
+    )
+    assert result["graph_capacity"] == context + steps
+    graph = [record for record in result["records"] if record["variant"] == "graph"]
+    assert [record["batch_size"] for record in graph] == [1, 2]
+    for record in result["records"]:
+        assert record["sequences_match"] is True
+        assert set(record) >= {
+            "tokens_per_s",
+            "roofline_per_step_s",
+            "max_memory_allocated",
+            "max_memory_reserved",
+            "cache_nbytes",
+            "cache_used_nbytes",
+            "cache_capacity",
+        }
+    for record in graph:
+        assert record["cache_capacity"] == context + steps
+        assert record["cache_used_nbytes"] == record["cache_nbytes"]
+
+
+@requires_cuda
+def test_overhead_suite_on_cuda_includes_graph_records() -> None:
+    result = run_overhead_suite(
+        _small_cuda_model(),
+        _small_cuda_model(seed=1),
+        "cuda",
+        torch.float64,
+        context=4,
+        steps=2,
+        warmup=1,
+        repeats=2,
+    )
+    keys = {(record["model"], record["variant"]) for record in result["records"]}
+    assert keys == {
+        (model, variant)
+        for model in ("pretrained", "structural")
+        for variant in ("dynamic", "static", "graph")
+    }
+    for record in result["records"]:
+        assert record["total_median_s_per_token"] > 0
+        assert record["host_median_s_per_token"] > 0
+
+
+@requires_cuda
+def test_capacity_suite_records_each_capacity() -> None:
+    model = _small_cuda_model()
+    batch, context, steps = 2, 4, 3
+    result = run_capacity_suite(
+        model,
+        "cuda",
+        torch.float64,
+        _small_calibration(),
+        batch=batch,
+        context=context,
+        steps=steps,
+        capacities=(8, 16, 32),
+        warmup=1,
+        repeats=2,
+    )
+    assert [record["cache_capacity"] for record in result["records"]] == [8, 16, 32]
+    per_token = kv_bytes_per_token(model.config, 8, batch)
+    for record in result["records"]:
+        assert record["sequences_match"] is True
+        assert record["cache_used_nbytes"] == per_token * (context + steps)
+        assert record["cache_nbytes"] == per_token * record["cache_capacity"]
+        assert record["step_bytes"] == decode_step_bytes(
+            model.config, 8, context + 1, batch, "capturable", capacity=record["cache_capacity"]
+        )
+        assert record["roofline_per_token_s"] > 0
+    rooflines = [record["roofline_per_token_s"] for record in result["records"]]
+    assert rooflines == sorted(rooflines)
+
+
+@requires_cuda
+def test_run_suites_feeds_the_graph_floor_from_overhead_to_decode() -> None:
+    results = run_suites(
+        _small_cuda_model(),
+        _small_cuda_model(seed=1),
+        "all",
+        "cuda",
+        torch.float64,
+        _small_calibration(),
+        warmup=1,
+        repeats=2,
+        steps=2,
+        decode_contexts=(4,),
+        batch_sizes=(1,),
+        batch_context=4,
+        prefill_lengths=(4,),
+        memory_batches=(1,),
+        memory_prompt_len=4,
+        memory_new_tokens=4,
+        memory_sample_every=2,
+        op_context=4,
+        overhead_context=4,
+        capacity_batch=2,
+        capacity_context=4,
+        capacities=(8, 16),
+    )
+    assert list(results) == ["overhead", "decode", "batch", "prefill", "memory", "capacity"]
+    floor = next(
+        record["total_median_s_per_token"]
+        for record in results["overhead"]["records"]
+        if record["model"] == "structural" and record["variant"] == "graph"
+    )
+    graph = next(record for record in results["decode"]["records"] if record["variant"] == "graph")
+    assert graph["graph_floor_s"] == floor
