@@ -14,6 +14,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+bench = [
+    "matplotlib>=3.11.2",
+]
 dev = [
     "pytest",
     "transformers>=5.20.2",
@@ -22,6 +25,10 @@ dev = [
 [build-system]
 requires = ["uv_build>=0.11.8,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+# bench (matplotlib) is a default group so the figure tests run with a plain `uv run pytest`.
+default-groups = ["dev", "bench"]
 
 [tool.uv.build-backend]
 module-name = "kvcache"
