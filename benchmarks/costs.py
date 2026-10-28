@@ -101,25 +101,40 @@ def decode_step_bytes(
     context_len: int,
     batch_size: int,
     cache: str,
+    capacity: int | None = None,
 ) -> int:
     """Bytes moved by one decode step that attends over ``context_len`` keys.
 
-    Both caches read the weights (``weight_bytes``) and the cache
+    ``"static"`` and ``"dynamic"`` read the weights (``weight_bytes``) and the cache
     (``kv_bytes_per_token * context_len``). ``"dynamic"`` also pays for
     ``torch.cat``: the ``context_len - 1`` tokens already stored are read and
     written again, which is ``2 * kv_bytes_per_token * (context_len - 1)``.
     ``"static"`` writes the new token in place and that write is neglected.
-    Activation traffic is neglected in both.
+
+    ``"capturable"`` is the cache of a decode step captured in a CUDA graph. Its
+    attention reads the whole buffer, written or not, so the cache term is
+    ``kv_bytes_per_token * capacity`` whatever ``context_len`` is; the write of
+    the new token is neglected. ``capacity`` is required for it and ignored by the
+    other caches. Activation traffic is neglected in all three.
+
+    The matching FLOP count for ``"capturable"`` is
+    ``batch_size * flops_per_token(config, capacity)``: attention works on every
+    position of the buffer, masked or not.
     """
-    if cache not in ("static", "dynamic"):
-        raise ValueError(f"cache must be 'static' or 'dynamic', got {cache!r}")
+    if cache not in ("static", "dynamic", "capturable"):
+        raise ValueError(f"cache must be 'static', 'dynamic' or 'capturable', got {cache!r}")
     if context_len < 1:
         raise ValueError(f"context_len must be >= 1, got {context_len}")
-    traffic = weight_bytes(config, itemsize) + kv_bytes_per_token(
-        config, itemsize, batch_size
-    ) * context_len
+    per_token = kv_bytes_per_token(config, itemsize, batch_size)
+    if cache == "capturable":
+        if capacity is None or capacity < context_len:
+            raise ValueError(
+                f"capturable needs a capacity >= context_len ({context_len}), got {capacity}"
+            )
+        return weight_bytes(config, itemsize) + per_token * capacity
+    traffic = weight_bytes(config, itemsize) + per_token * context_len
     if cache == "dynamic":
-        traffic += 2 * kv_bytes_per_token(config, itemsize, batch_size) * (context_len - 1)
+        traffic += 2 * per_token * (context_len - 1)
     return traffic
 
 

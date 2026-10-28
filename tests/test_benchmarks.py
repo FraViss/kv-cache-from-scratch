@@ -48,6 +48,24 @@ def test_cost_model_matches_the_closed_form() -> None:
     assert prefill_flops(CONFIG, 1) == flops_per_token(CONFIG, 1)
 
 
+def test_capturable_step_reads_the_whole_buffer() -> None:
+    assert decode_step_bytes(CONFIG, 4, 1, 1, "capturable", capacity=1024) == 570_110_976
+    assert decode_step_bytes(CONFIG, 4, 512, 8, "capturable", capacity=1024) == (
+        494_613_504 + 8 * 75_497_472
+    )
+    # Independent of how much of the buffer is written.
+    assert decode_step_bytes(CONFIG, 4, 1, 1, "capturable", capacity=1024) == decode_step_bytes(
+        CONFIG, 4, 1000, 1, "capturable", capacity=1024
+    )
+    # The eager caches ignore capacity.
+    assert decode_step_bytes(CONFIG, 4, 100, 1, "static", capacity=1024) == decode_step_bytes(
+        CONFIG, 4, 100, 1, "static"
+    )
+    for capacity in (None, 99):
+        with pytest.raises(ValueError, match="capacity"):
+            decode_step_bytes(CONFIG, 4, 100, 1, "capturable", capacity=capacity)
+
+
 def test_roofline_takes_the_slower_roof() -> None:
     assert roofline_time_s(100, 10, peak_flops=50, bandwidth=100) == 2
     assert roofline_time_s(10, 100, peak_flops=50, bandwidth=10) == 10
