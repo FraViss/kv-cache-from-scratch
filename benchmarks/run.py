@@ -26,7 +26,7 @@ from benchmarks.costs import (
 from benchmarks.gpu import heat_up, nvidia_smi_snapshot
 from benchmarks.machine import machine_info, require_clean_tree, set_benchmark_numerics
 from benchmarks.opcount import count_ops
-from benchmarks.timing import Measurement, time_interleaved_staged
+from benchmarks.timing import Measurement, time_fn, time_interleaved_staged
 from kvcache import GPT, GPT2Config, load_pretrained_gpt2
 from kvcache.cache import CapturableKVCache, DynamicKVCache, KVCache, StaticKVCache
 from kvcache.graphs import CUDAGraphDecoder
@@ -1009,6 +1009,148 @@ def run_graph_isolation_suite(
     }
 
 
+def _decode_linear_shapes(config: GPT2Config) -> dict[str, tuple[int, int, bool]]:
+    """The linear layers of one decode step as (in, out, has_bias), per GPT2Config."""
+    width = config.n_embd
+    return {
+        "c_attn": (width, 3 * width, True),
+        "attn.c_proj": (width, width, True),
+        "c_fc": (width, 4 * width, True),
+        "mlp.c_proj": (4 * width, width, True),
+        "lm_head": (width, config.vocab_size, False),
+    }
+
+
+def _capture_calls(call: Callable[[], object], calls: int, warmup: int = 3) -> torch.cuda.CUDAGraph:
+    """Capture ``calls`` consecutive calls in one graph, after a side-stream warmup."""
+    side = torch.cuda.Stream()
+    side.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(side):
+        for _ in range(warmup):
+            call()
+    torch.cuda.current_stream().wait_stream(side)
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        for _ in range(calls):
+            call()
+    return graph
+
+
+def run_shapes_suite(
+    device: str | torch.device,
+    dtype: torch.dtype,
+    configs: dict[str, GPT2Config],
+    *,
+    batches: Sequence[int] = (1, 8, 32),
+    calls: int = 20,
+    sizes_mib: Sequence[int] = (1, 4, 16, 64, 256, 1024),
+    warmup: int = 3,
+    repeats: int = 10,
+    heat_seconds: float = 3.0,
+) -> dict[str, Any]:
+    """Time the decode matmuls at their real shapes, inside a CUDA graph.
+
+    For every model family in ``configs`` (name to config) and every linear layer of
+    a decode step, ``calls`` consecutive linears on a (B, in) input are captured in
+    one graph and the replay is timed with CUDA events. A call is
+    ``torch.addmm(bias, x, weight.t(), out=out)``, or ``torch.mm`` without a bias:
+    the kernel ``F.linear`` dispatches to for a 2D input, writing into a static
+    output buffer. Bandwidth counts the weight and bias bytes; TFLOP/s counts
+    ``2 * B * in * out``.
+
+    A read-bandwidth curve follows: ``x.sum()`` on float32 tensors of each size in
+    ``sizes_mib``, ``calls`` calls per graph, bytes = ``x.nbytes``.
+    """
+    resolved = torch.device(device)
+    if resolved.type != "cuda":
+        raise ValueError("shapes suite requires CUDA")
+    itemsize = _itemsize(dtype)
+    generator = torch.Generator(device=resolved).manual_seed(SEED)
+
+    heat_up(resolved, heat_seconds)
+    shapes_before = nvidia_smi_snapshot()
+    shape_records: list[dict[str, Any]] = []
+    for family, config in configs.items():
+        for layer, (fan_in, fan_out, has_bias) in _decode_linear_shapes(config).items():
+            weight = torch.randn(
+                fan_out, fan_in, generator=generator, dtype=dtype, device=resolved
+            )
+            bias = (
+                torch.randn(fan_out, generator=generator, dtype=dtype, device=resolved)
+                if has_bias
+                else None
+            )
+            weight_t = weight.t()
+            for batch in batches:
+                x = torch.randn(batch, fan_in, generator=generator, dtype=dtype, device=resolved)
+                out = torch.empty(batch, fan_out, dtype=dtype, device=resolved)
+                if bias is not None:
+                    def call(x: Tensor = x, out: Tensor = out, bias: Tensor = bias) -> None:
+                        torch.addmm(bias, x, weight_t, out=out)
+                else:
+                    def call(x: Tensor = x, out: Tensor = out) -> None:
+                        torch.mm(x, weight_t, out=out)
+
+                graph = _capture_calls(call, calls)
+                measurement = time_fn(graph.replay, resolved, warmup, repeats)
+                per_call = measurement.median_s / calls
+                bytes_ = (fan_in * fan_out + (fan_out if has_bias else 0)) * itemsize
+                shape_records.append(
+                    {
+                        "family": family,
+                        "layer": layer,
+                        "in_features": fan_in,
+                        "out_features": fan_out,
+                        "bias": has_bias,
+                        "batch_size": batch,
+                        "calls": calls,
+                        **_measurement(measurement, calls),
+                        "weight_bytes": bytes_,
+                        "effective_bandwidth_GBs": bytes_ / per_call / 1e9,
+                        "effective_TFLOPs": 2 * batch * fan_in * fan_out / per_call / 1e12,
+                    }
+                )
+                del graph, x, out
+            del weight, weight_t, bias
+            _clear_cuda_cache(resolved)
+    shapes_after = nvidia_smi_snapshot()
+
+    heat_up(resolved, heat_seconds)
+    bandwidth_before = nvidia_smi_snapshot()
+    bandwidth_records: list[dict[str, Any]] = []
+    for size in sizes_mib:
+        x = torch.ones(size * 2**20 // 4, dtype=torch.float32, device=resolved)
+        graph = _capture_calls(x.sum, calls)
+        measurement = time_fn(graph.replay, resolved, warmup, repeats)
+        per_call = measurement.median_s / calls
+        bandwidth_records.append(
+            {
+                "size_mib": size,
+                "nbytes": x.nbytes,
+                "calls": calls,
+                **_measurement(measurement, calls),
+                "effective_bandwidth_GBs": x.nbytes / per_call / 1e9,
+            }
+        )
+        del graph, x
+        _clear_cuda_cache(resolved)
+    bandwidth_after = nvidia_smi_snapshot()
+
+    return {
+        "configs": {
+            family: {"n_embd": config.n_embd, "vocab_size": config.vocab_size}
+            for family, config in configs.items()
+        },
+        "call": "addmm(bias, x, weight.t(), out=out) or mm(x, weight.t(), out=out)",
+        "blocks": {
+            "shapes": {"before": shapes_before, "after": shapes_after},
+            "bandwidth": {"before": bandwidth_before, "after": bandwidth_after},
+        },
+        "records": shape_records,
+        "bandwidth_records": bandwidth_records,
+    }
+
+
 def run_suites(
     model: GPT,
     structural_model: GPT | None,
@@ -1037,6 +1179,9 @@ def run_suites(
     isolation_contexts: Sequence[int] = (64, 512, 1000),
     isolation_heat_seconds: float = 3.0,
     isolation_idle_s: float = 0.2,
+    shapes_batches: Sequence[int] = (1, 8, 32),
+    shapes_sizes_mib: Sequence[int] = (1, 4, 16, 64, 256, 1024),
+    shapes_heat_seconds: float = 3.0,
 ) -> dict[str, Any]:
     """Run selected suites. Small dimensions can be injected by unit tests.
 
@@ -1140,6 +1285,19 @@ def run_suites(
                 heat_seconds=isolation_heat_seconds,
                 idle_s=isolation_idle_s,
             )
+        elif name == "shapes":
+            if structural_model is None:
+                raise ValueError("shapes suite requires a structural model")
+            results[name] = run_shapes_suite(
+                resolved,
+                dtype,
+                {"real": model.config, "structural": structural_model.config},
+                batches=shapes_batches,
+                sizes_mib=shapes_sizes_mib,
+                warmup=warmup,
+                repeats=repeats,
+                heat_seconds=shapes_heat_seconds,
+            )
         else:
             raise ValueError(f"unknown suite {name!r}")
         results[name]["duration_s"] = time.perf_counter() - started
@@ -1156,6 +1314,7 @@ def validate_benchmark_request(suite: str, device: str, dtype: str) -> None:
         "overhead",
         "capacity",
         "graph_isolation",
+        "shapes",
     ):
         raise ValueError(f"{suite} suite requires CUDA")
     if device == "cpu" and suite == "all":
@@ -1174,6 +1333,7 @@ def main() -> None:
             "overhead",
             "capacity",
             "graph_isolation",
+            "shapes",
             "all",
         ),
         required=True,
@@ -1201,7 +1361,7 @@ def main() -> None:
     calibration = _calibration_values(calibration_payload, device, dtype)
     model = load_pretrained_gpt2(dtype=dtype, device=device)
     structural_model = None
-    if args.suite in ("overhead", "all", "graph_isolation"):
+    if args.suite in ("overhead", "all", "graph_isolation", "shapes"):
         torch.manual_seed(SEED)
         if device.type == "cuda":
             torch.cuda.manual_seed_all(SEED)
