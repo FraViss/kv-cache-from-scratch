@@ -114,7 +114,11 @@ class GPT(nn.Module):
         self.lm_head.weight = self.wte.weight
 
     def forward(
-        self, input_ids: Tensor, position_offset: int = 0, cache: KVCache | None = None
+        self,
+        input_ids: Tensor,
+        position_offset: int = 0,
+        cache: KVCache | None = None,
+        positions: Tensor | None = None,
     ) -> Tensor:
         """Return logits of shape (B, T, vocab_size) for input_ids of shape (B, T).
 
@@ -126,6 +130,14 @@ class GPT(nn.Module):
         Their keys and values are appended to the cache. The position of the first new
         token is cache.seq_len, the cache being the only source of truth for it, so
         position_offset must be left at 0.
+
+        positions, when given, is a 1D long tensor of the T absolute positions of the
+        new tokens, on the device of input_ids. It replaces cache.seq_len for the position
+        embedding, the attention mask and the cache writes, so a captured graph can
+        advance it on the device. It needs a cache that accepts device positions, and
+        position_offset must be 0. Its values are never read on the host: the caller
+        guarantees they are below n_positions and the cache capacity, and the graph
+        decoder checks that on the host before capturing.
         """
         if input_ids.dim() != 2:
             raise ValueError(f"input_ids must be 2D (B, T), got shape {tuple(input_ids.shape)}")
@@ -133,28 +145,47 @@ class GPT(nn.Module):
             raise ValueError(f"input_ids must have dtype torch.long, got {input_ids.dtype}")
         if position_offset < 0:
             raise ValueError(f"position_offset must be >= 0, got {position_offset}")
-        if cache is not None:
-            if cache.n_layer != self.config.n_layer:
-                raise ValueError(
-                    f"cache has {cache.n_layer} layers but the model has {self.config.n_layer}"
-                )
+        if cache is not None and cache.n_layer != self.config.n_layer:
+            raise ValueError(
+                f"cache has {cache.n_layer} layers but the model has {self.config.n_layer}"
+            )
+        T = input_ids.shape[1]
+
+        if positions is not None:
+            if cache is None or not cache.accepts_device_positions:
+                raise ValueError("positions can only be given with a cache that accepts them")
             if position_offset != 0:
                 raise ValueError(
-                    "position_offset must be 0 when a cache is given: the position "
-                    f"comes from cache.seq_len, got position_offset={position_offset}"
+                    "position_offset must be 0 when positions are given, "
+                    f"got position_offset={position_offset}"
                 )
-            # Read once, before any block updates the cache.
-            position_offset = cache.seq_len
-        T = input_ids.shape[1]
-        if position_offset + T > self.config.n_positions:
-            raise ValueError(
-                f"position_offset + sequence length = {position_offset} + {T} = "
-                f"{position_offset + T} exceeds n_positions ({self.config.n_positions})"
-            )
+            if positions.dim() != 1 or positions.dtype != torch.long or positions.shape[0] != T:
+                raise ValueError(
+                    f"positions must be a 1D long tensor of length {T}, got shape "
+                    f"{tuple(positions.shape)} and dtype {positions.dtype}"
+                )
+            if positions.device != input_ids.device:
+                raise ValueError(
+                    f"positions are on {positions.device}, input_ids on {input_ids.device}"
+                )
+        else:
+            if cache is not None:
+                if position_offset != 0:
+                    raise ValueError(
+                        "position_offset must be 0 when a cache is given: the position "
+                        f"comes from cache.seq_len, got position_offset={position_offset}"
+                    )
+                # Read once, before any block updates the cache.
+                position_offset = cache.seq_len
+            if position_offset + T > self.config.n_positions:
+                raise ValueError(
+                    f"position_offset + sequence length = {position_offset} + {T} = "
+                    f"{position_offset + T} exceeds n_positions ({self.config.n_positions})"
+                )
+            positions = torch.arange(position_offset, position_offset + T, device=input_ids.device)
 
-        # One tensor of absolute positions feeds both the position embedding and the
-        # attention mask of every block.
-        positions = torch.arange(position_offset, position_offset + T, device=input_ids.device)
+        # One tensor of absolute positions feeds the position embedding, the attention
+        # mask and the cache writes of every block.
         x = self.wte(input_ids) + self.wpe(positions)
         for layer_idx, block in enumerate(self.h):
             x = block(x, positions, cache, layer_idx)
