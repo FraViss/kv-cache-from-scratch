@@ -28,7 +28,8 @@ from benchmarks.machine import machine_info, require_clean_tree, set_benchmark_n
 from benchmarks.opcount import count_ops
 from benchmarks.timing import Measurement, time_interleaved_staged
 from kvcache import GPT, GPT2Config, load_pretrained_gpt2
-from kvcache.cache import DynamicKVCache, KVCache, StaticKVCache
+from kvcache.cache import CapturableKVCache, DynamicKVCache, KVCache, StaticKVCache
+from kvcache.graphs import CUDAGraphDecoder
 
 ROOT = Path(__file__).resolve().parents[1]
 CALIBRATION_PATH = ROOT / "benchmarks" / "results" / "calibration.json"
@@ -89,13 +90,21 @@ def _new_cache(
     raise ValueError(f"unknown cache variant {variant!r}")
 
 
-def _generate_uncached(model: GPT, prompt: Tensor, steps: int) -> Tensor:
-    sequence = prompt
+def _setup_uncached(model: GPT, prompt: Tensor) -> Tensor:
+    """Untimed first forward over the prompt; returns the prompt plus its first token."""
+    with torch.inference_mode():
+        first = model(prompt)[:, -1, :].argmax(dim=-1, keepdim=True)
+    return torch.cat((prompt, first), dim=1)
+
+
+def _generate_uncached(model: GPT, sequence: Tensor, steps: int) -> Tensor:
+    """``steps`` decode steps without a cache, each forwarding the whole sequence."""
+    start = sequence.shape[1]
     with torch.inference_mode():
         for _ in range(steps):
             token = model(sequence)[:, -1, :].argmax(dim=-1, keepdim=True)
             sequence = torch.cat((sequence, token), dim=1)
-    return sequence[:, prompt.shape[1] :]
+    return sequence[:, start:]
 
 
 def _setup_cached(
@@ -112,13 +121,56 @@ def _setup_cached(
 
 
 def _run_cached(model: GPT, state: tuple[KVCache, Tensor], steps: int) -> Tensor:
+    """``steps`` decode steps after the prefill, one token each; returns their tokens."""
     cache, token = state
-    generated = [token]
+    generated = []
     with torch.inference_mode():
-        for _ in range(steps - 1):
+        for _ in range(steps):
             token = model(token, cache=cache)[:, -1, :].argmax(dim=-1, keepdim=True)
             generated.append(token)
     return torch.cat(generated, dim=1)
+
+
+def _setup_graph(
+    model: GPT,
+    prompt: Tensor,
+    dtype: torch.dtype,
+    device: torch.device,
+    capacity: int,
+    steps: int,
+) -> CUDAGraphDecoder:
+    """Untimed: allocate a capturable cache, run an eager prefill, capture one step.
+
+    The cache is built outside inference mode so its buffers stay writable by the
+    graph. The decoder holds ``steps + 1`` output slots: slot 0 is the prefill token,
+    and each replay fills the next one.
+    """
+    batch, context = prompt.shape
+    if context + steps > capacity:
+        raise ValueError(
+            f"graph capacity {capacity} cannot hold context {context} + steps {steps}"
+        )
+    cache = CapturableKVCache.from_config(
+        model.config, batch, max_seq_len=capacity, dtype=dtype, device=device
+    )
+    with torch.no_grad():
+        first = model(prompt, cache=cache)[:, -1, :].argmax(dim=-1, keepdim=True)
+    decoder = CUDAGraphDecoder(model, cache, steps + 1)
+    decoder.out_tokens[:, :1].copy_(first)
+    decoder.prepare(first, position=context, first_step=1)
+    decoder.capture()
+    return decoder
+
+
+def _run_graph(decoder: CUDAGraphDecoder, steps: int) -> Tensor:
+    """``steps`` replays with no synchronisation; returns a view of their tokens.
+
+    ``advance`` only updates Python lengths (no kernel), so ``used_nbytes`` and
+    ``seq_len`` match the device afterwards.
+    """
+    decoder.replay(steps)
+    decoder.cache.advance(steps)
+    return decoder.out_tokens[:, 1:]
 
 
 def _calibration_values(
@@ -152,31 +204,46 @@ def _decode_prediction(
     batch: int,
     itemsize: int,
     calibration: dict[str, float],
+    capacity: int | None = None,
 ) -> dict[str, float]:
+    """Roofline per decode step, averaged over the ``steps`` steps after the prefill.
+
+    Step ``index`` feeds the token at position ``context + index`` and attends over
+    ``context + 1 + index`` keys. The uncached step forwards the whole sequence of
+    that length. The graph step reads the whole buffer of ``capacity`` slots and does
+    attention over all of them, so its cost does not depend on the step.
+    """
     times = []
+    flops_total = 0
     for index in range(steps):
-        length = context + index
+        length = context + 1 + index
         if variant == "uncached":
             flops = batch * prefill_flops(model.config, length)
             bytes_ = weight_bytes(model.config, itemsize)
+        elif variant == "graph":
+            if capacity is None:
+                raise ValueError("the graph prediction needs the cache capacity")
+            flops = batch * flops_per_token(model.config, capacity)
+            bytes_ = decode_step_bytes(
+                model.config, itemsize, length, batch, "capturable", capacity=capacity
+            )
         else:
             flops = batch * flops_per_token(model.config, length)
-            bytes_ = decode_step_bytes(
-                model.config, itemsize, length, batch, variant
-            )
+            bytes_ = decode_step_bytes(model.config, itemsize, length, batch, variant)
+        flops_total += flops
         times.append(_roofline(flops, bytes_, calibration))
     return {
         "roofline_per_token_s": sum(times) / len(times),
-        "mean_flops_per_token": sum(
-            (
-                batch * prefill_flops(model.config, context + index)
-                if variant == "uncached"
-                else batch * flops_per_token(model.config, context + index)
-            )
-            for index in range(steps)
-        )
-        / steps,
+        "mean_flops_per_token": flops_total / steps,
     }
+
+
+def _graph_bytes(
+    model: GPT, itemsize: int, context: int, batch: int, capacity: int
+) -> int:
+    return decode_step_bytes(
+        model.config, itemsize, context + 1, batch, "capturable", capacity=capacity
+    )
 
 
 def _decode_opcounts(
@@ -185,17 +252,41 @@ def _decode_opcounts(
     device: torch.device,
     context: int,
     launch_overhead_us: float,
+    variants: Sequence[str] = ("dynamic", "static"),
 ) -> dict[str, Any]:
+    """aten operations of one eager decode step per variant.
+
+    ``"graph"`` counts the eager step that the graph captures: a forward with a
+    capturable cache and positions held in a tensor. A replay launches the same
+    kernels from one host call, so no per-kernel launch cost is charged for it.
+    """
     prompt = _prompt(model, 1, context, device)
     result: dict[str, Any] = {}
-    for variant in ("dynamic", "static"):
-        cache = _new_cache(variant, model, 1, dtype, device)
-        with torch.inference_mode():
-            token = model(prompt, cache=cache)[:, -1, :].argmax(dim=-1, keepdim=True)
-            counts = count_ops(lambda: model(token, cache=cache))
-        counts["launch_limited_s"] = counts["compute"] * launch_overhead_us / 1e6
+    for variant in variants:
+        if variant == "graph":
+            cache = CapturableKVCache.from_config(
+                model.config, 1, dtype=dtype, device=device
+            )
+            positions = torch.tensor([context], device=device)
+            with torch.no_grad():
+                token = model(prompt, cache=cache)[:, -1, :].argmax(dim=-1, keepdim=True)
+                counts = count_ops(
+                    lambda: model(token, cache=cache, positions=positions)
+                )
+            counts["launch_limited_s"] = None
+        else:
+            cache = _new_cache(variant, model, 1, dtype, device)
+            with torch.inference_mode():
+                token = model(prompt, cache=cache)[:, -1, :].argmax(dim=-1, keepdim=True)
+                counts = count_ops(lambda: model(token, cache=cache))
+            counts["launch_limited_s"] = counts["compute"] * launch_overhead_us / 1e6
         result[variant] = counts
     return result
+
+
+def _cached_variants(device: torch.device) -> tuple[str, ...]:
+    """Cache variants for a device: the graph variant needs CUDA."""
+    return ("dynamic", "static", "graph") if device.type == "cuda" else ("dynamic", "static")
 
 
 def run_decode_suite(
@@ -209,8 +300,17 @@ def run_decode_suite(
     warmup: int = 3,
     repeats: int = 10,
     op_context: int = 512,
+    graph_capacity: int | None = None,
+    graph_floor_s: float | None = None,
 ) -> dict[str, Any]:
-    """Benchmark uncached, dynamic and static greedy decoding at B=1."""
+    """Benchmark uncached, dynamic, static and (on CUDA) graph greedy decoding at B=1.
+
+    Every variant runs ``steps`` decode steps after an untimed prefill, and the
+    timing is divided by ``steps``. The graph cache holds ``graph_capacity`` tokens
+    (default ``n_positions``). ``graph_floor_s`` is the per-token time of the
+    structural model in the graph, from the overhead suite of the same run; when it
+    is given, graph records also carry the "graph floor + bandwidth" prediction.
+    """
     resolved = torch.device(device)
     if contexts is None:
         contexts = (64, 128, 256, 512, 768, 1000) if resolved.type == "cuda" else (
@@ -219,11 +319,13 @@ def run_decode_suite(
             512,
             1000,
         )
+    capacity = model.config.n_positions if graph_capacity is None else graph_capacity
+    variants = _cached_variants(resolved)
     records: list[dict[str, Any]] = []
     itemsize = _itemsize(dtype)
     op_len = min(op_context, model.config.n_positions - 1)
     opcounts = _decode_opcounts(
-        model, dtype, resolved, op_len, calibration["launch_overhead_us"]
+        model, dtype, resolved, op_len, calibration["launch_overhead_us"], variants
     )
     for context in contexts:
         if context + steps > model.config.n_positions:
@@ -236,52 +338,74 @@ def run_decode_suite(
 
         def uncached_setup() -> Tensor:
             _clear_cuda_cache(resolved)
-            return prompt
+            return _setup_uncached(model, prompt)
 
-        def uncached_run(state: Tensor) -> Tensor:
+        def uncached_run(state: object) -> Tensor:
+            assert isinstance(state, Tensor)
             outputs["uncached"] = _generate_uncached(model, state, steps)
             return outputs["uncached"]
 
         cases: dict[str, tuple[Callable[[], object], Callable[[object], object]]] = {
             "uncached": (uncached_setup, uncached_run),
         }
-        for variant in ("dynamic", "static"):
-            def setup(variant: str = variant) -> tuple[KVCache, Tensor]:
-                _clear_cuda_cache(resolved)
-                return _setup_cached(model, prompt, variant, dtype, resolved)
+        for variant in variants:
+            if variant == "graph":
+                def setup() -> CUDAGraphDecoder:
+                    _clear_cuda_cache(resolved)
+                    return _setup_graph(model, prompt, dtype, resolved, capacity, steps)
 
-            def run(state: object, variant: str = variant) -> Tensor:
-                assert isinstance(state, tuple)
-                outputs[variant] = _run_cached(model, state, steps)
-                return outputs[variant]
+                def run(state: object) -> Tensor:
+                    assert isinstance(state, CUDAGraphDecoder)
+                    outputs["graph"] = _run_graph(state, steps)
+                    return outputs["graph"]
+            else:
+                def setup(variant: str = variant) -> tuple[KVCache, Tensor]:
+                    _clear_cuda_cache(resolved)
+                    return _setup_cached(model, prompt, variant, dtype, resolved)
+
+                def run(state: object, variant: str = variant) -> Tensor:
+                    assert isinstance(state, tuple)
+                    outputs[variant] = _run_cached(model, state, steps)
+                    return outputs[variant]
 
             cases[variant] = (setup, run)
 
         timings = time_interleaved_staged(cases, resolved, warmup, repeats)
-        sequences_match = all(
-            torch.equal(outputs["uncached"], outputs[name]) for name in ("dynamic", "static")
-        )
+        matches = {
+            name: torch.equal(outputs["uncached"], outputs[name]) for name in variants
+        }
+        sequences_match = all(matches.values())
         for variant, measurement in timings.items():
             prediction = _decode_prediction(
-                model, variant, context, steps, 1, itemsize, calibration
+                model, variant, context, steps, 1, itemsize, calibration, capacity
             )
             launch_limited = (
                 None
-                if variant == "uncached"
+                if variant in ("uncached", "graph")
                 else opcounts[variant]["launch_limited_s"]
             )
-            records.append(
-                {
-                    "variant": variant,
-                    "context_len": context,
-                    "steps": steps,
-                    **_measurement(measurement, steps),
-                    **prediction,
-                    "launch_limited_per_step_s": launch_limited,
-                    "generated_tokens": outputs[variant].cpu().tolist(),
-                    "sequences_match": sequences_match,
-                }
-            )
+            record: dict[str, Any] = {
+                "variant": variant,
+                "context_len": context,
+                "steps": steps,
+                **_measurement(measurement, steps),
+                **prediction,
+                "launch_limited_per_step_s": launch_limited,
+                "generated_tokens": outputs[variant].cpu().tolist(),
+                "sequences_match": sequences_match,
+                "matches_uncached": True if variant == "uncached" else matches[variant],
+            }
+            if variant == "graph":
+                bandwidth = calibration["read_bandwidth_GBs"] * 1e9
+                record["cache_capacity"] = capacity
+                record["graph_floor_s"] = graph_floor_s
+                record["graph_floor_plus_bandwidth_per_token_s"] = (
+                    None
+                    if graph_floor_s is None
+                    else graph_floor_s
+                    + _graph_bytes(model, itemsize, context, 1, capacity) / bandwidth
+                )
+            records.append(record)
         if resolved.type == "cuda":
             torch.cuda.empty_cache()
     return {"op_context": op_len, "opcounts": opcounts, "records": records}
@@ -299,36 +423,59 @@ def run_batch_suite(
     warmup: int = 3,
     repeats: int = 10,
 ) -> dict[str, Any]:
-    """Benchmark cached CUDA decode throughput and peak memory by batch."""
+    """Benchmark cached CUDA decode throughput and peak memory by batch.
+
+    The graph variant gets the smallest capacity that fits, ``context + steps``.
+    Its memory figures include the private pool of the captured graph.
+    """
     resolved = torch.device(device)
     if resolved.type != "cuda":
         raise ValueError("batch suite requires CUDA")
     records: list[dict[str, Any]] = []
     itemsize = _itemsize(dtype)
+    graph_capacity = context + steps
+    capacities = {"dynamic": None, "static": model.config.n_positions, "graph": graph_capacity}
     for batch in batches:
         prompt = _prompt(model, batch, context, resolved)
         outputs: dict[str, Tensor] = {}
         memory: dict[str, dict[str, int]] = {}
         cases: dict[str, tuple[Callable[[], object], Callable[[object], object]]] = {}
-        for variant in ("dynamic", "static"):
-            def setup(variant: str = variant) -> tuple[KVCache, Tensor]:
-                _clear_cuda_cache(resolved)
-                state = _setup_cached(model, prompt, variant, dtype, resolved)
-                torch.cuda.synchronize()
-                torch.cuda.reset_peak_memory_stats()
-                return state
 
-            def run(state: object, variant: str = variant) -> Tensor:
-                assert isinstance(state, tuple)
-                outputs[variant] = _run_cached(model, state, steps)
-                cache = state[0]
-                memory[variant] = {
-                    "max_memory_allocated": torch.cuda.max_memory_allocated(),
-                    "max_memory_reserved": torch.cuda.max_memory_reserved(),
-                    "cache_nbytes": cache.nbytes,
-                    "cache_used_nbytes": cache.used_nbytes,
-                }
-                return outputs[variant]
+        def record_memory(variant: str, cache: KVCache) -> None:
+            memory[variant] = {
+                "max_memory_allocated": torch.cuda.max_memory_allocated(),
+                "max_memory_reserved": torch.cuda.max_memory_reserved(),
+                "cache_nbytes": cache.nbytes,
+                "cache_used_nbytes": cache.used_nbytes,
+            }
+
+        for variant in ("dynamic", "static", "graph"):
+            if variant == "graph":
+                def setup() -> CUDAGraphDecoder:
+                    _clear_cuda_cache(resolved)
+                    state = _setup_graph(model, prompt, dtype, resolved, graph_capacity, steps)
+                    torch.cuda.synchronize()
+                    torch.cuda.reset_peak_memory_stats()
+                    return state
+
+                def run(state: object) -> Tensor:
+                    assert isinstance(state, CUDAGraphDecoder)
+                    outputs["graph"] = _run_graph(state, steps)
+                    record_memory("graph", state.cache)
+                    return outputs["graph"]
+            else:
+                def setup(variant: str = variant) -> tuple[KVCache, Tensor]:
+                    _clear_cuda_cache(resolved)
+                    state = _setup_cached(model, prompt, variant, dtype, resolved)
+                    torch.cuda.synchronize()
+                    torch.cuda.reset_peak_memory_stats()
+                    return state
+
+                def run(state: object, variant: str = variant) -> Tensor:
+                    assert isinstance(state, tuple)
+                    outputs[variant] = _run_cached(model, state, steps)
+                    record_memory(variant, state[0])
+                    return outputs[variant]
 
             cases[variant] = (setup, run)
         try:
@@ -344,9 +491,19 @@ def run_batch_suite(
             gc.collect()
             torch.cuda.empty_cache()
             continue
+        sequences_match = all(
+            torch.equal(outputs["dynamic"], outputs[name]) for name in ("static", "graph")
+        )
         for variant, measurement in timings.items():
             prediction = _decode_prediction(
-                model, variant, context, steps, batch, itemsize, calibration
+                model,
+                variant,
+                context,
+                steps,
+                batch,
+                itemsize,
+                calibration,
+                capacities[variant],
             )
             records.append(
                 {
@@ -354,17 +511,19 @@ def run_batch_suite(
                     "batch_size": batch,
                     "context_len": context,
                     "steps": steps,
+                    "cache_capacity": capacities[variant],
                     "out_of_memory": False,
                     **_measurement(measurement),
                     "tokens_per_s": batch * steps / measurement.median_s,
                     "roofline_per_step_s": prediction["roofline_per_token_s"],
+                    "sequences_match": sequences_match,
                     **memory[variant],
                 }
             )
         del prompt
         gc.collect()
         torch.cuda.empty_cache()
-    return {"records": records}
+    return {"graph_capacity": graph_capacity, "records": records}
 
 
 def run_prefill_suite(
@@ -550,34 +709,55 @@ def run_overhead_suite(
     The structural model has the same 12-layer control flow as GPT-2 small but
     tiny matrices, so its CUDA-event time approximates the Python, dispatcher,
     launch and small-kernel floor. Host timings stop before synchronization.
+
+    On CUDA a graph variant replays a captured step (cache capacity
+    ``n_positions``). Its host time is the time to enqueue ``steps`` replays.
     """
     resolved = torch.device(device)
     models = {
         "pretrained": pretrained_model,
         "structural": structural_model,
     }
+    variants = _cached_variants(resolved)
     prompts = {
         name: _prompt(model, 1, context, resolved)
         for name, model in models.items()
     }
     cases: dict[str, tuple[Callable[[], object], Callable[[object], object]]] = {}
     for model_name, model in models.items():
-        for variant in ("dynamic", "static"):
+        for variant in variants:
             case_name = f"{model_name}:{variant}"
+            if variant == "graph":
+                def setup(
+                    model: GPT = model, model_name: str = model_name
+                ) -> CUDAGraphDecoder:
+                    _clear_cuda_cache(resolved)
+                    return _setup_graph(
+                        model,
+                        prompts[model_name],
+                        dtype,
+                        resolved,
+                        model.config.n_positions,
+                        steps,
+                    )
 
-            def setup(
-                model: GPT = model,
-                model_name: str = model_name,
-                variant: str = variant,
-            ) -> tuple[KVCache, Tensor]:
-                _clear_cuda_cache(resolved)
-                return _setup_cached(
-                    model, prompts[model_name], variant, dtype, resolved
-                )
+                def run(state: object) -> Tensor:
+                    assert isinstance(state, CUDAGraphDecoder)
+                    return _run_graph(state, steps)
+            else:
+                def setup(
+                    model: GPT = model,
+                    model_name: str = model_name,
+                    variant: str = variant,
+                ) -> tuple[KVCache, Tensor]:
+                    _clear_cuda_cache(resolved)
+                    return _setup_cached(
+                        model, prompts[model_name], variant, dtype, resolved
+                    )
 
-            def run(state: object, model: GPT = model) -> Tensor:
-                assert isinstance(state, tuple)
-                return _run_cached(model, state, steps)
+                def run(state: object, model: GPT = model) -> Tensor:
+                    assert isinstance(state, tuple)
+                    return _run_cached(model, state, steps)
 
             cases[case_name] = (setup, run)
 
@@ -585,7 +765,7 @@ def run_overhead_suite(
     host = _time_host_interleaved_staged(cases, resolved, warmup, repeats)
     opcounts = {
         model_name: _decode_opcounts(
-            model, dtype, resolved, context, launch_overhead_us=0.0
+            model, dtype, resolved, context, launch_overhead_us=0.0, variants=variants
         )
         for model_name, model in models.items()
     }
@@ -594,7 +774,7 @@ def run_overhead_suite(
     }
     records: list[dict[str, Any]] = []
     for model_name in models:
-        for variant in ("dynamic", "static"):
+        for variant in variants:
             case_name = f"{model_name}:{variant}"
             total_summary = _measurement(total[case_name], steps)
             host_summary = _measurement(host[case_name], steps)
@@ -635,6 +815,84 @@ def run_overhead_suite(
     }
 
 
+def _graph_floor_s(overhead: dict[str, Any] | None) -> float | None:
+    """Per-token time of the structural model in the graph, from an overhead result."""
+    if overhead is None:
+        return None
+    for record in overhead["records"]:
+        if record["model"] == "structural" and record["variant"] == "graph":
+            return record["total_median_s_per_token"]
+    return None
+
+
+def run_capacity_suite(
+    model: GPT,
+    device: str | torch.device,
+    dtype: torch.dtype,
+    calibration: dict[str, float],
+    *,
+    batch: int = 8,
+    context: int = 64,
+    steps: int = 16,
+    capacities: Sequence[int] = (128, 256, 512, 1024),
+    warmup: int = 3,
+    repeats: int = 10,
+) -> dict[str, Any]:
+    """Graph decode time against cache capacity, at a fixed batch and context.
+
+    The graph step reads and attends over the whole buffer, so its cost should grow
+    with the capacity even though the number of written tokens is the same.
+    """
+    resolved = torch.device(device)
+    if resolved.type != "cuda":
+        raise ValueError("capacity suite requires CUDA")
+    itemsize = _itemsize(dtype)
+    prompt = _prompt(model, batch, context, resolved)
+    outputs: dict[int, Tensor] = {}
+    memory: dict[int, dict[str, int]] = {}
+    cases: dict[str, tuple[Callable[[], object], Callable[[object], object]]] = {}
+    for capacity in capacities:
+        def setup(capacity: int = capacity) -> CUDAGraphDecoder:
+            _clear_cuda_cache(resolved)
+            return _setup_graph(model, prompt, dtype, resolved, capacity, steps)
+
+        def run(state: object, capacity: int = capacity) -> Tensor:
+            assert isinstance(state, CUDAGraphDecoder)
+            outputs[capacity] = _run_graph(state, steps)
+            memory[capacity] = {
+                "cache_nbytes": state.cache.nbytes,
+                "cache_used_nbytes": state.cache.used_nbytes,
+            }
+            return outputs[capacity]
+
+        cases[str(capacity)] = (setup, run)
+    timings = time_interleaved_staged(cases, resolved, warmup, repeats)
+    first = outputs[capacities[0]]
+    sequences_match = all(torch.equal(first, output) for output in outputs.values())
+    records: list[dict[str, Any]] = []
+    for capacity in capacities:
+        prediction = _decode_prediction(
+            model, "graph", context, steps, batch, itemsize, calibration, capacity
+        )
+        records.append(
+            {
+                "variant": "graph",
+                "cache_capacity": capacity,
+                "batch_size": batch,
+                "context_len": context,
+                "steps": steps,
+                **_measurement(timings[str(capacity)], steps),
+                "roofline_per_token_s": prediction["roofline_per_token_s"],
+                "step_bytes": _graph_bytes(model, itemsize, context, batch, capacity),
+                "sequences_match": sequences_match,
+                **memory[capacity],
+            }
+        )
+    del prompt
+    _clear_cuda_cache(resolved)
+    return {"records": records}
+
+
 def run_suites(
     model: GPT,
     structural_model: GPT | None,
@@ -656,11 +914,19 @@ def run_suites(
     memory_sample_every: int = 32,
     op_context: int = 512,
     overhead_context: int = 512,
+    graph_capacity: int | None = None,
+    capacity_batch: int = 8,
+    capacity_context: int = 64,
+    capacities: Sequence[int] = (128, 256, 512, 1024),
 ) -> dict[str, Any]:
-    """Run selected suites. Small dimensions can be injected by unit tests."""
+    """Run selected suites. Small dimensions can be injected by unit tests.
+
+    With ``suite="all"`` the overhead suite runs first, so decode can use the graph
+    floor measured in the same run.
+    """
     resolved = torch.device(device)
     selected = (
-        ("decode", "batch", "prefill", "memory", "overhead")
+        ("overhead", "decode", "batch", "prefill", "memory", "capacity")
         if suite == "all"
         else (suite,)
     )
@@ -678,6 +944,8 @@ def run_suites(
                 warmup=warmup,
                 repeats=repeats,
                 op_context=op_context,
+                graph_capacity=graph_capacity,
+                graph_floor_s=_graph_floor_s(results.get("overhead")),
             )
         elif name == "batch":
             results[name] = run_batch_suite(
@@ -724,6 +992,19 @@ def run_suites(
                 warmup=warmup,
                 repeats=repeats,
             )
+        elif name == "capacity":
+            results[name] = run_capacity_suite(
+                model,
+                resolved,
+                dtype,
+                calibration,
+                batch=capacity_batch,
+                context=capacity_context,
+                steps=steps,
+                capacities=capacities,
+                warmup=warmup,
+                repeats=repeats,
+            )
         else:
             raise ValueError(f"unknown suite {name!r}")
         results[name]["duration_s"] = time.perf_counter() - started
@@ -734,17 +1015,17 @@ def validate_benchmark_request(suite: str, device: str, dtype: str) -> None:
     """Reject CLI combinations excluded by ADR-0009 or by a suite's contract."""
     if device == "cpu" and dtype == "bfloat16":
         raise ValueError("bfloat16 on CPU is rejected by ADR-0009; use float32")
-    if device == "cpu" and suite in ("batch", "memory", "overhead"):
+    if device == "cpu" and suite in ("batch", "memory", "overhead", "capacity"):
         raise ValueError(f"{suite} suite requires CUDA")
     if device == "cpu" and suite == "all":
-        raise ValueError("--suite all includes CUDA-only batch and memory suites")
+        raise ValueError("--suite all includes CUDA-only batch, memory and capacity suites")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--suite",
-        choices=("decode", "batch", "prefill", "memory", "overhead", "all"),
+        choices=("decode", "batch", "prefill", "memory", "overhead", "capacity", "all"),
         required=True,
     )
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
