@@ -17,6 +17,11 @@ dependencies = [
 bench = [
     "matplotlib>=3.11.2",
 ]
+demo = [
+    "ipykernel>=7.4.0",
+    "nbconvert>=7.17.2",
+    "tiktoken>=0.14.0",
+]
 dev = [
     "pytest",
     "transformers>=5.20.2",
