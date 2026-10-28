@@ -281,6 +281,20 @@ class StaticKVCache(KVCache):
         update only ever returns the filled part of a layer."""
         self._lengths = [0] * self.n_layer
 
+    def truncate(self, seq_len: int) -> None:
+        """Keep only the first seq_len tokens of every layer.
+
+        Like reset, this leaves the buffers untouched: only the written part of a layer
+        is ever visible, so the dropped tokens are simply overwritten later.
+        """
+        if len(set(self._lengths)) != 1:
+            raise ValueError(f"cannot truncate: the layers have different lengths {self._lengths}")
+        if not 0 <= seq_len <= self._lengths[0]:
+            raise ValueError(
+                f"seq_len must be in [0, {self._lengths[0]}] to truncate, got {seq_len}"
+            )
+        self._lengths = [seq_len] * self.n_layer
+
     def update(
         self, layer_idx: int, k: Tensor, v: Tensor, positions: Tensor
     ) -> tuple[Tensor, Tensor]:
