@@ -314,3 +314,22 @@ def test_static_cache_on_cuda(model: GPT) -> None:
     cache = StaticKVCache.from_config(SMALL, B, dtype=torch.float64, device="cuda")
     cached = generate_greedy_cached(model, prompt, 20, cache=cache)
     assert torch.equal(cached, generate_greedy_uncached(model, prompt, 20))
+
+
+def test_attend_ignores_unwritten_slots_of_a_buffer(model: GPT) -> None:
+    written, capacity = 8, 16
+    generator = torch.Generator().manual_seed(0)
+    shape = (B, SMALL.n_head, capacity, SMALL.head_dim)
+    q = torch.randn(B, SMALL.n_head, 3, SMALL.head_dim, generator=generator, dtype=torch.float64)
+    k = torch.randn(shape, generator=generator, dtype=torch.float64)
+    v = torch.randn(shape, generator=generator, dtype=torch.float64)
+    # Slots past the written tokens hold large but finite garbage, as a reused buffer would.
+    garbage = (B, SMALL.n_head, capacity - written, SMALL.head_dim)
+    k[:, :, written:] = torch.randn(garbage, generator=generator, dtype=torch.float64) * 1e3
+    v[:, :, written:] = torch.randn(garbage, generator=generator, dtype=torch.float64) * 1e3
+    q_positions = torch.tensor([5, 6, 7])
+
+    attn = model.h[0].attn
+    over_buffer = attn.attend(q, k, v, q_positions)
+    over_written = attn.attend(q, k[:, :, :written], v[:, :, :written], q_positions)
+    torch.testing.assert_close(over_buffer, over_written, atol=1e-12, rtol=0)
