@@ -10,6 +10,7 @@ import gc
 import json
 import time
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -893,6 +894,11 @@ def run_capacity_suite(
     return {"records": records}
 
 
+def _now_iso() -> str:
+    """Wall-clock time, ISO 8601 with the local UTC offset, to the millisecond."""
+    return datetime.now().astimezone().isoformat(timespec="milliseconds")
+
+
 GRAPH_ISOLATION_MODES = (
     "isolated_ascending",
     "isolated_descending",
@@ -928,6 +934,9 @@ def run_graph_isolation_suite(
     ``interleaved_with_eager`` runs ``steps`` untimed eager decode steps with a
     ``StaticKVCache``, setup included, before every repetition, as the alternating
     suites did.
+
+    Every record and every block carries wall-clock start and end times, taken outside
+    the timed regions, so the run can be matched against an external GPU clock log.
     """
     resolved = torch.device(device)
     if resolved.type != "cuda":
@@ -943,6 +952,7 @@ def run_graph_isolation_suite(
             states[(model_name, context)] = (decoder, first, prompt)
 
     def measure(model_name: str, context: int, mode: str) -> dict[str, Any]:
+        started_at = _now_iso()
         decoder, first, prompt = states[(model_name, context)]
         model = models[model_name]
         produced: list[Tensor] = []
@@ -967,6 +977,7 @@ def run_graph_isolation_suite(
             {"graph": (setup, run)}, resolved, warmup, repeats
         )["graph"]
         torch.cuda.synchronize()
+        finished_at = _now_iso()
         produced.append(decoder.out_tokens[:, 1:].clone())
         # produced[0] holds the capture-time contents; compare the replays only.
         replays = produced[1:]
@@ -975,6 +986,8 @@ def run_graph_isolation_suite(
             "mode": mode,
             "context_len": context,
             "steps": steps,
+            "started_at": started_at,
+            "finished_at": finished_at,
             "cache_capacity": decoder.cache.capacity,
             **_measurement(measurement, steps),
             "repeats_identical": all(torch.equal(replays[0], t) for t in replays[1:]),
@@ -985,17 +998,30 @@ def run_graph_isolation_suite(
     blocks: list[dict[str, Any]] = []
     for mode in GRAPH_ISOLATION_MODES:
         order = tuple(reversed(contexts)) if mode == "isolated_descending" else tuple(contexts)
+        heat_up_started_at = _now_iso()
         heat_up(resolved, heat_seconds)
         before = nvidia_smi_snapshot()
+        block_started_at = _now_iso()
         mode_records = [
             measure(model_name, context, mode) for model_name in models for context in order
         ]
+        block_finished_at = _now_iso()
         after = nvidia_smi_snapshot()
         for record in mode_records:
             record["nvidia_smi_before_block"] = before
             record["nvidia_smi_after_block"] = after
         records.extend(mode_records)
-        blocks.append({"mode": mode, "order": list(order), "before": before, "after": after})
+        blocks.append(
+            {
+                "mode": mode,
+                "order": list(order),
+                "heat_up_started_at": heat_up_started_at,
+                "started_at": block_started_at,
+                "finished_at": block_finished_at,
+                "before": before,
+                "after": after,
+            }
+        )
     for decoder, _, _ in states.values():
         decoder.graph = None
     states.clear()

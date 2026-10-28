@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime
 import weakref
 
 import pytest
@@ -567,6 +568,8 @@ def test_graph_isolation_suite_repeats_the_same_work_in_every_mode() -> None:
     assert result["modes"] == list(modes)
     assert [block["mode"] for block in result["blocks"]] == list(modes)
     assert result["blocks"][1]["order"] == [12, 4]
+    for block in result["blocks"]:
+        assert block["heat_up_started_at"] <= block["started_at"] <= block["finished_at"]
     assert len(result["records"]) == len(modes) * 2 * len(contexts)
     tokens: dict[tuple[str, int], list[list[int]]] = {}
     for record in result["records"]:
@@ -581,7 +584,12 @@ def test_graph_isolation_suite_repeats_the_same_work_in_every_mode() -> None:
             "repeats_identical",
             "nvidia_smi_before_block",
             "nvidia_smi_after_block",
+            "started_at",
+            "finished_at",
         }
+        started = datetime.fromisoformat(record["started_at"])
+        assert started.tzinfo is not None
+        assert started <= datetime.fromisoformat(record["finished_at"])
         assert record["median_s"] > 0
         assert record["repeats_identical"] is True
         tokens.setdefault((record["model"], record["context_len"]), []).append(
