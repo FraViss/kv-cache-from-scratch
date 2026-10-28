@@ -1,6 +1,6 @@
 {
   "machine": {
-    "timestamp": "2026-10-27T16:01:06.877628+01:00",
+    "timestamp": "2026-10-28T11:02:39.861749+01:00",
     "os": "Windows-11-10.0.26200-SP0",
     "python": "3.12.13",
     "torch": "2.11.0+cu128",
@@ -19,15 +19,15 @@
       "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
       "driver_version": "610.74",
       "power.limit": null,
-      "power.draw": 10.65,
-      "temperature.gpu": 53,
-      "clocks.sm": 997,
+      "power.draw": 4.8,
+      "temperature.gpu": 49,
+      "clocks.sm": 292,
       "clocks.max.sm": 3090
     },
     "float32_matmul_precision": "highest",
     "allow_tf32_matmul": false,
     "allow_tf32_cudnn": true,
-    "git_commit": "0274162b6f45c091f3e5e91b6fbacde6ee6cbadd",
+    "git_commit": "b0a0cde46e63219a4b71081661df7e437e65dbc2",
     "dirty": true,
     "dirty_outside_results": false
   },
@@ -44,8 +44,8 @@
   "calibration": {
     "path": "benchmarks/results/calibration.json",
     "values_used": {
-      "read_bandwidth_GBs": 45.334733471900705,
-      "peak_TFLOPs": 0.4705044003173805,
+      "read_bandwidth_GBs": 51.871964090493634,
+      "peak_TFLOPs": 0.504854091768437,
       "launch_overhead_us": 0.0
     }
   },
@@ -53,73 +53,73 @@
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 11.25,
-    "temperature.gpu": 55,
-    "clocks.sm": 877,
+    "power.draw": 7.81,
+    "temperature.gpu": 54,
+    "clocks.sm": 180,
     "clocks.max.sm": 3090
   },
   "nvidia_smi_after": {
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 11.28,
-    "temperature.gpu": 53,
-    "clocks.sm": 742,
+    "power.draw": 4.67,
+    "temperature.gpu": 49,
+    "clocks.sm": 262,
     "clocks.max.sm": 3090
   },
-  "duration_s": 252.2030416999478,
+  "duration_s": 263.9887900999747,
   "suites": {
     "decode": {
       "op_context": 512,
       "opcounts": {
         "dynamic": {
-          "total": 354,
-          "view": 120,
+          "total": 378,
+          "view": 144,
           "compute": 234,
           "by_name": {
             "aten.add": 25,
-            "aten.arange": 1,
+            "aten.arange": 13,
             "aten.bitwise_not": 12,
             "aten.cat": 24,
             "aten.div": 12,
             "aten.embedding": 2,
             "aten.gelu": 12,
             "aten.layer_norm": 25,
+            "aten.le": 12,
             "aten.linear": 49,
             "aten.masked_fill": 12,
             "aten.matmul": 24,
-            "aten.ones": 12,
             "aten.softmax": 12,
             "aten.split": 12,
             "aten.transpose": 60,
-            "aten.tril": 12,
+            "aten.unsqueeze": 24,
             "aten.view": 48
           },
           "launch_limited_s": 0.0
         },
         "static": {
-          "total": 462,
-          "view": 228,
+          "total": 486,
+          "view": 252,
           "compute": 234,
           "by_name": {
             "aten.add": 25,
-            "aten.arange": 1,
+            "aten.arange": 13,
             "aten.bitwise_not": 12,
             "aten.copy_": 24,
             "aten.div": 12,
             "aten.embedding": 2,
             "aten.gelu": 12,
             "aten.layer_norm": 25,
+            "aten.le": 12,
             "aten.linear": 49,
             "aten.masked_fill": 12,
             "aten.matmul": 24,
-            "aten.ones": 12,
             "aten.select": 60,
             "aten.slice": 48,
             "aten.softmax": 12,
             "aten.split": 12,
             "aten.transpose": 60,
-            "aten.tril": 12,
+            "aten.unsqueeze": 24,
             "aten.view": 48
           },
           "launch_limited_s": 0.0
@@ -130,292 +130,304 @@
           "variant": "uncached",
           "context_len": 64,
           "steps": 8,
-          "median_s": 0.07158404374999999,
-          "p25_s": 0.068968153125,
-          "p75_s": 0.07454376875,
-          "roofline_per_token_s": 0.035801959438928,
-          "mean_flops_per_token": 16844979456.0,
+          "median_s": 0.06534956875,
+          "p25_s": 0.0642893625,
+          "p75_s": 0.06579502500000001,
+          "roofline_per_token_s": 0.03386534308182246,
+          "mean_flops_per_token": 17097057024.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
             [
-              72,
               12,
               42,
               1077,
               10793,
               72,
               12,
-              42
+              42,
+              1077
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "dynamic",
           "context_len": 64,
           "steps": 8,
-          "median_s": 0.0185740375,
-          "p25_s": 0.017920175,
-          "p75_s": 0.019902568750000002,
-          "roofline_per_token_s": 0.011236328726091064,
-          "mean_flops_per_token": 249552384.0,
+          "median_s": 0.0176655875,
+          "p25_s": 0.0170306,
+          "p75_s": 0.018327287499999997,
+          "roofline_per_token_s": 0.009824520064652717,
+          "mean_flops_per_token": 249589248.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              72,
               12,
               42,
               1077,
               10793,
               72,
               12,
-              42
+              42,
+              1077
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "static",
           "context_len": 64,
           "steps": 8,
-          "median_s": 0.0175078875,
-          "p25_s": 0.0167155,
-          "p75_s": 0.01801615,
-          "roofline_per_token_s": 0.011020030465374968,
-          "mean_flops_per_token": 249552384.0,
+          "median_s": 0.017667275,
+          "p25_s": 0.01691693125,
+          "p75_s": 0.018119809375,
+          "roofline_per_token_s": 0.00963263837722257,
+          "mean_flops_per_token": 249589248.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              72,
               12,
               42,
               1077,
               10793,
               72,
               12,
-              42
+              42,
+              1077
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "uncached",
           "context_len": 256,
           "steps": 8,
-          "median_s": 0.2066822875,
-          "p25_s": 0.20497098749999998,
-          "p75_s": 0.20818613125,
-          "roofline_per_token_s": 0.14154118234617485,
-          "mean_flops_per_token": 66595749120.0,
+          "median_s": 0.1970154125,
+          "p25_s": 0.19594066250000003,
+          "p75_s": 0.19767832500000002,
+          "roofline_per_token_s": 0.132438230281132,
+          "mean_flops_per_token": 66861982464.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
             [
-              82,
               13,
               785,
               14,
               268,
               14,
               11195,
-              14
+              14,
+              11195
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "dynamic",
           "context_len": 256,
           "steps": 8,
-          "median_s": 0.02171609375,
-          "p25_s": 0.020914134375000004,
-          "p75_s": 0.0221475125,
-          "roofline_per_token_s": 0.012173079088290106,
-          "mean_flops_per_token": 256630272.0,
+          "median_s": 0.02149283125,
+          "p25_s": 0.02055344375,
+          "p75_s": 0.022278784375,
+          "roofline_per_token_s": 0.010643215264354685,
+          "mean_flops_per_token": 256667136.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              82,
               13,
               785,
               14,
               268,
               14,
               11195,
-              14
+              14,
+              11195
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "static",
           "context_len": 256,
           "steps": 8,
-          "median_s": 0.017504875000000003,
-          "p25_s": 0.017279825,
-          "p75_s": 0.0180193375,
-          "roofline_per_token_s": 0.011332280586107982,
-          "mean_flops_per_token": 256630272.0,
+          "median_s": 0.01736416875,
+          "p25_s": 0.016876778125,
+          "p75_s": 0.018038365624999997,
+          "roofline_per_token_s": 0.009905536777123225,
+          "mean_flops_per_token": 256667136.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              82,
               13,
               785,
               14,
               268,
               14,
               11195,
-              14
+              14,
+              11195
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "uncached",
           "context_len": 512,
           "steps": 8,
-          "median_s": 0.47418829375,
-          "p25_s": 0.469713946875,
-          "p75_s": 0.47807764374999995,
-          "roofline_per_token_s": 0.29151261287137714,
-          "mean_flops_per_token": 137157967104.0,
+          "median_s": 0.45054854375,
+          "p25_s": 0.433280465625,
+          "p75_s": 0.48110041562500006,
+          "roofline_per_token_s": 0.2722431630385625,
+          "mean_flops_per_token": 137443074816.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
             [
-              378,
               12,
               75,
               4820,
               2870,
               12,
               75,
-              4820
+              4820,
+              2870
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "dynamic",
           "context_len": 512,
           "steps": 8,
-          "median_s": 0.0248667375,
-          "p25_s": 0.024582503125,
-          "p75_s": 0.02540254375,
-          "roofline_per_token_s": 0.013422079571222162,
-          "mean_flops_per_token": 266067456.0,
+          "median_s": 0.024485550000000002,
+          "p25_s": 0.022555909375000002,
+          "p75_s": 0.025817015625000002,
+          "roofline_per_token_s": 0.01173480886395731,
+          "mean_flops_per_token": 266104320.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              378,
               12,
               75,
               4820,
               2870,
               12,
               75,
-              4820
+              4820,
+              2870
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "static",
           "context_len": 512,
           "steps": 8,
-          "median_s": 0.018629068749999998,
-          "p25_s": 0.018379059375,
-          "p75_s": 0.018929521875,
-          "roofline_per_token_s": 0.011748614080418666,
-          "mean_flops_per_token": 266067456.0,
+          "median_s": 0.01764065,
+          "p25_s": 0.017394178125,
+          "p75_s": 0.01895544375,
+          "roofline_per_token_s": 0.010269401310324099,
+          "mean_flops_per_token": 266104320.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              378,
               12,
               75,
               4820,
               2870,
               12,
               75,
-              4820
+              4820,
+              2870
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "uncached",
           "context_len": 1000,
           "steps": 8,
-          "median_s": 1.033925875,
-          "p25_s": 1.0182156281249999,
-          "p75_s": 1.043685253125,
-          "roofline_per_token_s": 0.6058423282581789,
-          "mean_flops_per_token": 285051481344.0,
+          "median_s": 0.9624557125,
+          "p25_s": 0.95480978125,
+          "p75_s": 1.01890846875,
+          "roofline_per_token_s": 0.5652575129586009,
+          "mean_flops_per_token": 285372568320.0,
           "launch_limited_per_step_s": null,
           "generated_tokens": [
             [
-              262,
               1271,
               286,
               661,
               287,
               262,
               995,
-              338
+              338,
+              4387
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "dynamic",
           "context_len": 1000,
           "steps": 8,
-          "median_s": 0.025308725,
-          "p25_s": 0.025090543750000003,
-          "p75_s": 0.025485353125,
-          "roofline_per_token_s": 0.01580298674181139,
-          "mean_flops_per_token": 284057088.0,
+          "median_s": 0.0254026,
+          "p25_s": 0.0244702,
+          "p75_s": 0.026386734375,
+          "roofline_per_token_s": 0.013815659163199812,
+          "mean_flops_per_token": 284093952.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              262,
               1271,
               286,
               661,
               287,
               262,
               995,
-              338
+              338,
+              4387
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         },
         {
           "variant": "static",
           "context_len": 1000,
           "steps": 8,
-          "median_s": 0.01961505625,
-          "p25_s": 0.019401865625,
-          "p75_s": 0.02029168125,
-          "roofline_per_token_s": 0.01254224980394841,
-          "mean_flops_per_token": 284057088.0,
+          "median_s": 0.0192134875,
+          "p25_s": 0.018416068749999997,
+          "p75_s": 0.020354590625,
+          "roofline_per_token_s": 0.010963018076738267,
+          "mean_flops_per_token": 284093952.0,
           "launch_limited_per_step_s": 0.0,
           "generated_tokens": [
             [
-              262,
               1271,
               286,
               661,
               287,
               262,
               995,
-              338
+              338,
+              4387
             ]
           ],
-          "sequences_match": true
+          "sequences_match": true,
+          "matches_uncached": true
         }
       ],
-      "duration_s": 252.2030250999378
+      "duration_s": 263.9887522999197
     }
   }
 }

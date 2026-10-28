@@ -1,6 +1,6 @@
 {
   "machine": {
-    "timestamp": "2026-10-27T16:02:12.307999+01:00",
+    "timestamp": "2026-10-28T11:03:34.133628+01:00",
     "os": "Windows-11-10.0.26200-SP0",
     "python": "3.12.13",
     "torch": "2.11.0+cu128",
@@ -19,15 +19,15 @@
       "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
       "driver_version": "610.74",
       "power.limit": null,
-      "power.draw": 10.86,
-      "temperature.gpu": 53,
-      "clocks.sm": 945,
+      "power.draw": 7.17,
+      "temperature.gpu": 50,
+      "clocks.sm": 405,
       "clocks.max.sm": 3090
     },
     "float32_matmul_precision": "highest",
     "allow_tf32_matmul": false,
     "allow_tf32_cudnn": true,
-    "git_commit": "0274162b6f45c091f3e5e91b6fbacde6ee6cbadd",
+    "git_commit": "b0a0cde46e63219a4b71081661df7e437e65dbc2",
     "dirty": true,
     "dirty_outside_results": false
   },
@@ -44,8 +44,8 @@
   "calibration": {
     "path": "benchmarks/results/calibration.json",
     "values_used": {
-      "read_bandwidth_GBs": 45.334733471900705,
-      "peak_TFLOPs": 0.4705044003173805,
+      "read_bandwidth_GBs": 51.871964090493634,
+      "peak_TFLOPs": 0.504854091768437,
       "launch_overhead_us": 0.0
     }
   },
@@ -53,136 +53,136 @@
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 10.91,
-    "temperature.gpu": 51,
-    "clocks.sm": 900,
+    "power.draw": 9.74,
+    "temperature.gpu": 48,
+    "clocks.sm": 585,
     "clocks.max.sm": 3090
   },
   "nvidia_smi_after": {
     "name": "NVIDIA GeForce RTX 5060 Laptop GPU",
     "driver_version": "610.74",
     "power.limit": null,
-    "power.draw": 10.86,
-    "temperature.gpu": 53,
-    "clocks.sm": 945,
+    "power.draw": 7.17,
+    "temperature.gpu": 50,
+    "clocks.sm": 405,
     "clocks.max.sm": 3090
   },
-  "duration_s": 51.4064592999639,
+  "duration_s": 49.148394300136715,
   "suites": {
     "prefill": {
       "records": [
         {
           "variant": "uncached",
           "prompt_len": 64,
-          "median_s": 0.0652934,
-          "p25_s": 0.064915475,
-          "p75_s": 0.06677285,
+          "median_s": 0.0608869,
+          "p25_s": 0.060138175,
+          "p75_s": 0.06201825,
           "flops": 15963095040,
-          "achieved_TFLOPs": 0.24448252105113227,
-          "peak_fraction": 0.5196179268168707,
-          "roofline_s": 0.03392762114282467
+          "achieved_TFLOPs": 0.2621761830541545,
+          "peak_fraction": 0.5193108015343326,
+          "roofline_s": 0.031619224841940755
         },
         {
           "variant": "static",
           "prompt_len": 64,
-          "median_s": 0.06802835,
-          "p25_s": 0.06620255,
-          "p75_s": 0.06881645,
+          "median_s": 0.062480999999999995,
+          "p25_s": 0.061086475,
+          "p75_s": 0.0650136,
           "flops": 15963095040,
-          "achieved_TFLOPs": 0.23465356781400695,
-          "peak_fraction": 0.49872767960452763,
-          "roofline_s": 0.03392762114282467
+          "achieved_TFLOPs": 0.2554871887453786,
+          "peak_fraction": 0.5060614401488573,
+          "roofline_s": 0.031619224841940755
         },
         {
           "variant": "uncached",
           "prompt_len": 128,
-          "median_s": 0.1302308,
-          "p25_s": 0.127353775,
-          "p75_s": 0.133655025,
+          "median_s": 0.12515205000000001,
+          "p25_s": 0.12282427499999998,
+          "p75_s": 0.132805675,
           "flops": 32228179968,
-          "achieved_TFLOPs": 0.24746972273839982,
-          "peak_fraction": 0.5259668614607391,
-          "roofline_s": 0.06849708514152122
+          "achieved_TFLOPs": 0.25751220190160684,
+          "peak_fraction": 0.5100725261026918,
+          "roofline_s": 0.0638366222904304
         },
         {
           "variant": "static",
           "prompt_len": 128,
-          "median_s": 0.13382044999999998,
-          "p25_s": 0.132240025,
-          "p75_s": 0.135132875,
+          "median_s": 0.12929415,
+          "p25_s": 0.1247048,
+          "p75_s": 0.13492325,
           "flops": 32228179968,
-          "achieved_TFLOPs": 0.24083150197148495,
-          "peak_fraction": 0.5118581288698494,
-          "roofline_s": 0.06849708514152122
+          "achieved_TFLOPs": 0.2492624760517007,
+          "peak_fraction": 0.4937317140058572,
+          "roofline_s": 0.0638366222904304
         },
         {
           "variant": "uncached",
           "prompt_len": 256,
-          "median_s": 0.2039897,
-          "p25_s": 0.201830575,
-          "p75_s": 0.20738225,
+          "median_s": 0.2094066,
+          "p25_s": 0.2020459,
+          "p75_s": 0.22102502499999999,
           "flops": 65664319488,
-          "achieved_TFLOPs": 0.3219001718616185,
-          "peak_fraction": 0.6841597478035902,
-          "roofline_s": 0.13956154170653004
+          "achieved_TFLOPs": 0.313573304222503,
+          "peak_fraction": 0.6211166935858582,
+          "roofline_s": 0.13006593500705638
         },
         {
           "variant": "static",
           "prompt_len": 256,
-          "median_s": 0.2062862,
-          "p25_s": 0.2010318,
-          "p75_s": 0.208713225,
+          "median_s": 0.20872975,
+          "p25_s": 0.198480975,
+          "p75_s": 0.2154666,
           "flops": 65664319488,
-          "achieved_TFLOPs": 0.318316588739334,
-          "peak_fraction": 0.676543276799563,
-          "roofline_s": 0.13956154170653004
+          "achieved_TFLOPs": 0.3145901314402954,
+          "peak_fraction": 0.6231307947576058,
+          "roofline_s": 0.13006593500705638
         },
         {
           "variant": "uncached",
           "prompt_len": 512,
-          "median_s": 0.46258355,
-          "p25_s": 0.4530998,
-          "p75_s": 0.47777464999999997,
+          "median_s": 0.45457535,
+          "p25_s": 0.43701315,
+          "p75_s": 0.49158965,
           "flops": 136160477184,
-          "achieved_TFLOPs": 0.2943478582063716,
-          "peak_fraction": 0.6256006490222369,
-          "roofline_s": 0.28939256910701033
+          "achieved_TFLOPs": 0.29953334949640364,
+          "peak_fraction": 0.593306767995438,
+          "roofline_s": 0.269702631718895
         },
         {
           "variant": "static",
           "prompt_len": 512,
-          "median_s": 0.4775974,
-          "p25_s": 0.4691032,
-          "p75_s": 0.496998375,
+          "median_s": 0.45216015,
+          "p25_s": 0.441493275,
+          "p75_s": 0.473753825,
           "flops": 136160477184,
-          "achieved_TFLOPs": 0.2850946784551172,
-          "peak_fraction": 0.6059341384752311,
-          "roofline_s": 0.28939256910701033
+          "achieved_TFLOPs": 0.3011332979786034,
+          "peak_fraction": 0.5964758984596388,
+          "roofline_s": 0.269702631718895
         },
         {
           "variant": "uncached",
           "prompt_len": 1024,
-          "median_s": 1.1216002,
-          "p25_s": 1.046879425,
-          "p75_s": 1.1547427,
+          "median_s": 1.0329294,
+          "p25_s": 0.982994625,
+          "p75_s": 1.0721315,
           "flops": 291648307200,
-          "achieved_TFLOPs": 0.2600287581974397,
-          "peak_fraction": 0.5526595670987059,
-          "roofline_s": 0.6198630809898219
+          "achieved_TFLOPs": 0.28235066907767364,
+          "peak_fraction": 0.5592718246347903,
+          "roofline_s": 0.5776883102569192
         },
         {
           "variant": "static",
           "prompt_len": 1024,
-          "median_s": 1.0463947,
-          "p25_s": 1.0262157,
-          "p75_s": 1.1080694,
+          "median_s": 1.02032455,
+          "p25_s": 0.9883599,
+          "p75_s": 1.0445922,
           "flops": 291648307200,
-          "achieved_TFLOPs": 0.2787173016071278,
-          "peak_fraction": 0.5923797979766353,
-          "roofline_s": 0.6198630809898219
+          "achieved_TFLOPs": 0.28583876297007654,
+          "peak_fraction": 0.5661809374839792,
+          "roofline_s": 0.5776883102569192
         }
       ],
-      "duration_s": 51.406442099949345
+      "duration_s": 49.14837820013054
     }
   }
 }
