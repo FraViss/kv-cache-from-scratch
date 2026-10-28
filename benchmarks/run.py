@@ -893,6 +893,122 @@ def run_capacity_suite(
     return {"records": records}
 
 
+GRAPH_ISOLATION_MODES = (
+    "isolated_ascending",
+    "isolated_descending",
+    "after_idle",
+    "interleaved_with_eager",
+)
+
+
+def run_graph_isolation_suite(
+    pretrained_model: GPT,
+    structural_model: GPT,
+    device: str | torch.device,
+    dtype: torch.dtype,
+    *,
+    contexts: Sequence[int] = (64, 512, 1000),
+    steps: int = 16,
+    capacity: int | None = None,
+    warmup: int = 3,
+    repeats: int = 10,
+    heat_seconds: float = 3.0,
+    idle_s: float = 0.2,
+) -> dict[str, Any]:
+    """Time graph replays alone, to separate GPU clock effects from the graph itself.
+
+    For each (model, T) the prefill and the capture happen once. Before every
+    repetition ``prepare`` restores tokens, positions and step index, and the cache is
+    never advanced, so every repetition replays the same ``steps`` steps over the same
+    data. Only ``replay(steps)`` is timed, with CUDA events.
+
+    Modes, each a block preceded by ``heat_up`` and bracketed by nvidia-smi snapshots:
+    ``isolated_ascending`` and ``isolated_descending`` run T in each order;
+    ``after_idle`` sleeps ``idle_s`` before every repetition (untimed);
+    ``interleaved_with_eager`` runs ``steps`` untimed eager decode steps with a
+    ``StaticKVCache``, setup included, before every repetition, as the alternating
+    suites did.
+    """
+    resolved = torch.device(device)
+    if resolved.type != "cuda":
+        raise ValueError("graph_isolation suite requires CUDA")
+    models = {"pretrained": pretrained_model, "structural": structural_model}
+    states: dict[tuple[str, int], tuple[CUDAGraphDecoder, Tensor, Tensor]] = {}
+    for model_name, model in models.items():
+        graph_capacity = model.config.n_positions if capacity is None else capacity
+        for context in contexts:
+            prompt = _prompt(model, 1, context, resolved)
+            decoder = _setup_graph(model, prompt, dtype, resolved, graph_capacity, steps)
+            first = decoder.out_tokens[:, :1].clone()
+            states[(model_name, context)] = (decoder, first, prompt)
+
+    def measure(model_name: str, context: int, mode: str) -> dict[str, Any]:
+        decoder, first, prompt = states[(model_name, context)]
+        model = models[model_name]
+        produced: list[Tensor] = []
+
+        def setup() -> CUDAGraphDecoder:
+            # Untimed: keep the tokens of the previous repetition before restoring.
+            produced.append(decoder.out_tokens[:, 1:].clone())
+            decoder.prepare(first, position=context, first_step=1)
+            if mode == "after_idle":
+                time.sleep(idle_s)
+            elif mode == "interleaved_with_eager":
+                _run_cached(
+                    model, _setup_cached(model, prompt, "static", dtype, resolved), steps
+                )
+            return decoder
+
+        def run(state: object) -> None:
+            assert isinstance(state, CUDAGraphDecoder)
+            state.replay(steps)
+
+        measurement = time_interleaved_staged(
+            {"graph": (setup, run)}, resolved, warmup, repeats
+        )["graph"]
+        torch.cuda.synchronize()
+        produced.append(decoder.out_tokens[:, 1:].clone())
+        # produced[0] holds the capture-time contents; compare the replays only.
+        replays = produced[1:]
+        return {
+            "model": model_name,
+            "mode": mode,
+            "context_len": context,
+            "steps": steps,
+            "cache_capacity": decoder.cache.capacity,
+            **_measurement(measurement, steps),
+            "repeats_identical": all(torch.equal(replays[0], t) for t in replays[1:]),
+            "generated_tokens": replays[-1].cpu().tolist(),
+        }
+
+    records: list[dict[str, Any]] = []
+    blocks: list[dict[str, Any]] = []
+    for mode in GRAPH_ISOLATION_MODES:
+        order = tuple(reversed(contexts)) if mode == "isolated_descending" else tuple(contexts)
+        heat_up(resolved, heat_seconds)
+        before = nvidia_smi_snapshot()
+        mode_records = [
+            measure(model_name, context, mode) for model_name in models for context in order
+        ]
+        after = nvidia_smi_snapshot()
+        for record in mode_records:
+            record["nvidia_smi_before_block"] = before
+            record["nvidia_smi_after_block"] = after
+        records.extend(mode_records)
+        blocks.append({"mode": mode, "order": list(order), "before": before, "after": after})
+    for decoder, _, _ in states.values():
+        decoder.graph = None
+    states.clear()
+    _clear_cuda_cache(resolved)
+    return {
+        "capacity": capacity,
+        "contexts": list(contexts),
+        "modes": list(GRAPH_ISOLATION_MODES),
+        "blocks": blocks,
+        "records": records,
+    }
+
+
 def run_suites(
     model: GPT,
     structural_model: GPT | None,
@@ -918,6 +1034,9 @@ def run_suites(
     capacity_batch: int = 8,
     capacity_context: int = 64,
     capacities: Sequence[int] = (128, 256, 512, 1024),
+    isolation_contexts: Sequence[int] = (64, 512, 1000),
+    isolation_heat_seconds: float = 3.0,
+    isolation_idle_s: float = 0.2,
 ) -> dict[str, Any]:
     """Run selected suites. Small dimensions can be injected by unit tests.
 
@@ -1005,6 +1124,22 @@ def run_suites(
                 warmup=warmup,
                 repeats=repeats,
             )
+        elif name == "graph_isolation":
+            if structural_model is None:
+                raise ValueError("graph_isolation suite requires a structural model")
+            results[name] = run_graph_isolation_suite(
+                model,
+                structural_model,
+                resolved,
+                dtype,
+                contexts=isolation_contexts,
+                steps=steps,
+                capacity=graph_capacity,
+                warmup=warmup,
+                repeats=repeats,
+                heat_seconds=isolation_heat_seconds,
+                idle_s=isolation_idle_s,
+            )
         else:
             raise ValueError(f"unknown suite {name!r}")
         results[name]["duration_s"] = time.perf_counter() - started
@@ -1015,7 +1150,13 @@ def validate_benchmark_request(suite: str, device: str, dtype: str) -> None:
     """Reject CLI combinations excluded by ADR-0009 or by a suite's contract."""
     if device == "cpu" and dtype == "bfloat16":
         raise ValueError("bfloat16 on CPU is rejected by ADR-0009; use float32")
-    if device == "cpu" and suite in ("batch", "memory", "overhead", "capacity"):
+    if device == "cpu" and suite in (
+        "batch",
+        "memory",
+        "overhead",
+        "capacity",
+        "graph_isolation",
+    ):
         raise ValueError(f"{suite} suite requires CUDA")
     if device == "cpu" and suite == "all":
         raise ValueError("--suite all includes CUDA-only batch, memory and capacity suites")
@@ -1025,7 +1166,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--suite",
-        choices=("decode", "batch", "prefill", "memory", "overhead", "capacity", "all"),
+        choices=(
+            "decode",
+            "batch",
+            "prefill",
+            "memory",
+            "overhead",
+            "capacity",
+            "graph_isolation",
+            "all",
+        ),
         required=True,
     )
     parser.add_argument("--device", choices=("cpu", "cuda"), required=True)
@@ -1051,7 +1201,7 @@ def main() -> None:
     calibration = _calibration_values(calibration_payload, device, dtype)
     model = load_pretrained_gpt2(dtype=dtype, device=device)
     structural_model = None
-    if args.suite in ("overhead", "all"):
+    if args.suite in ("overhead", "all", "graph_isolation"):
         torch.manual_seed(SEED)
         if device.type == "cuda":
             torch.cuda.manual_seed_all(SEED)
